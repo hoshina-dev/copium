@@ -43,7 +43,7 @@ func DB(t *testing.T) *gorm.DB {
 func bootstrap() (*gorm.DB, error) {
 	ctx := context.Background()
 	c, err := tcpostgres.Run(ctx,
-		"postgres:16-alpine",
+		"postgres:18-alpine",
 		tcpostgres.WithDatabase("copium"),
 		tcpostgres.WithUsername("postgres"),
 		tcpostgres.WithPassword("postgres"),

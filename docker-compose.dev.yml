@@ -1,0 +1,28 @@
+# Local-only dev stack. Used by `make run`, the JetBrains "Compose: Up Dev Stack"
+# config, and the "Dev Stack + Server" compound. NOT for production.
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: copium-pg
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: copium
+    ports:
+      - "5432:5432"
+    volumes:
+      # postgres applies every *.sql in alphabetical order on first init.
+      - ./sql/001_init.up.sql:/docker-entrypoint-initdb.d/001_init.up.sql:ro
+      - ./sql_mock/900_seed_templates.up.sql:/docker-entrypoint-initdb.d/900_seed_templates.up.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d copium"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: copium-mailhog
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # web UI
