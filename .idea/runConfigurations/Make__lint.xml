@@ -1,0 +1,6 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Make: lint" type="MakefileRunConfiguration" factoryName="Makefile">
+    <makefile filename="$PROJECT_DIR$/Makefile" target="lint" workingDirectory="$PROJECT_DIR$" arguments="" environmentVariables="&lt;envs /&gt;" />
+    <method v="2" />
+  </configuration>
+</component>

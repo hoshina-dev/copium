@@ -1,0 +1,23 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Run server (SMTP -&gt; Mailhog)" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="copium" />
+    <working_directory value="$PROJECT_DIR$" />
+    <envs>
+      <env name="PORT" value="8081" />
+      <env name="EMAIL_PROVIDER" value="smtp" />
+      <env name="EMAIL_DEFAULT_FROM" value="Copium &lt;noreply@example.com&gt;" />
+      <env name="SMTP_HOST" value="localhost" />
+      <env name="SMTP_PORT" value="1025" />
+      <env name="SMTP_TLS" value="false" />
+      <env name="CUSTAPI_BASE_URL" value="http://localhost:8080" />
+      <env name="DATA_SOURCE_NAME" value="host=localhost port=5432 user=postgres password=postgres dbname=copium sslmode=disable" />
+      <env name="WORKER_ENABLED" value="true" />
+      <env name="OTEL_ENABLED" value="false" />
+    </envs>
+    <kind value="PACKAGE" />
+    <package value="github.com/hoshina-dev/copium/cmd/server" />
+    <directory value="$PROJECT_DIR$" />
+    <filePath value="$PROJECT_DIR$/cmd/server/main.go" />
+    <method v="2" />
+  </configuration>
+</component>

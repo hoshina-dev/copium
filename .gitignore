@@ -28,5 +28,10 @@ go.work.sum
 .env
 
 # Editor/IDE
-# .idea/
-# .vscode/
+# Share JetBrains run configurations and the project's local .idea/.gitignore
+# so cloners get one-click "Run server", "Test All", etc.
+# Ignore everything else under .idea/ (workspace.xml, codeStyles, dataSources...).
+/.idea/*
+!/.idea/runConfigurations/
+!/.idea/.gitignore
+.vscode/

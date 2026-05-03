@@ -1,0 +1,15 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Test: All" type="GoTestRunConfiguration" factoryName="Go Test">
+    <module name="copium" />
+    <working_directory value="$PROJECT_DIR$" />
+    <go_parameters value="-race" />
+    <framework value="gotest" />
+    <kind value="PACKAGE" />
+    <package value="github.com/hoshina-dev/copium" />
+    <directory value="$PROJECT_DIR$" />
+    <filePath value="$PROJECT_DIR$" />
+    <pattern value="^.*$" />
+    <parameters value="-count=1" />
+    <method v="2" />
+  </configuration>
+</component>

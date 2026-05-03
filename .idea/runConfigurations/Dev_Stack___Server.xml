@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Dev Stack + Server" type="CompoundRunConfigurationType">
+    <toRun name="Compose: Up Dev Stack" type="docker-deploy" />
+    <toRun name="Run server" type="GoApplicationRunConfiguration" />
+    <method v="2" />
+  </configuration>
+</component>
