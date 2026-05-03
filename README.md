@@ -49,14 +49,32 @@ Copy `.env.example` to `.env` and adjust. See the file for every supported varia
 
 ## Local dev with Docker
 
+The bundled compose file boots Postgres 18 (with migrations + seed auto-applied
+on first init) and Mailhog:
+
 ```sh
-docker run -d --name copium-pg -p 5432:5432 \
-  -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=copium postgres:16
-docker run -d --name copium-mailhog -p 1025:1025 -p 8025:8025 mailhog/mailhog
-
-# apply migrations (manual for now)
-psql "postgres://postgres:postgres@localhost:5432/copium?sslmode=disable" -f sql/001_init.up.sql
-
+docker compose -f docker-compose.dev.yml up -d
 EMAIL_PROVIDER=smtp SMTP_HOST=localhost SMTP_PORT=1025 make run
 # Mailhog UI: http://localhost:8025
 ```
+
+## JetBrains run configurations
+
+Shared run configs live under `.idea/runConfigurations/` and are picked up
+automatically when the project is opened in GoLand or IntelliJ IDEA Ultimate
+(Go plugin required). Available entries in the run dropdown:
+
+| group | name | what it does |
+| --- | --- | --- |
+| Run | `Run server` | `go run ./cmd/server` with safe defaults (noop sender) |
+| Run | `Run server (SMTP -> Mailhog)` | same but `EMAIL_PROVIDER=smtp` -> `localhost:1025` |
+| Test | `Test: All` | `go test -race -count=1 ./...` |
+| Test | `Test: Current Package` | runs tests in the package of the active editor file |
+| Test | `Test: Integration (-tags=integration)` | spins testcontainers (10m timeout) |
+| Test | `Test: All (Coverage)` | same as Test: All but with the GoLand coverage runner |
+| Make | `Make: test` / `test-watch` / `mocks` / `lint` | invokes the Makefile targets |
+| Docker | `Compose: Up Dev Stack` | brings up Postgres + Mailhog from `docker-compose.dev.yml` |
+| Compound | `Dev Stack + Server` | one-click: Compose up then Run server |
+
+Local IDE state (`workspace.xml`, `codeStyles/`, etc.) is intentionally
+gitignored - only the run configs and `.idea/.gitignore` are shared.
