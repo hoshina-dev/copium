@@ -22,6 +22,21 @@ func NewEmailHandler(svc *services.EmailService) *EmailHandler {
 	return &EmailHandler{svc: svc, validate: validator.New()}
 }
 
+// Send enqueues an email for asynchronous delivery.
+//
+//	@Summary     Enqueue an email
+//	@Description Validates params against the active template version's JSON Schema,
+//	@Description resolves the recipient via custapi, renders the message, and writes
+//	@Description a snapshot to email_outbox. The worker performs the actual send.
+//	@Tags        emails
+//	@Accept      json
+//	@Produce     json
+//	@Param       request body     models.SendEmailRequest true "Send request"
+//	@Success     202     {object} models.SendEmailResponse
+//	@Failure     400     {object} models.ErrorResponse "invalid JSON or params failed schema"
+//	@Failure     404     {object} models.ErrorResponse "template or user not found"
+//	@Failure     502     {object} models.ErrorResponse "custapi unreachable"
+//	@Router      /emails/send [post]
 func (h *EmailHandler) Send(c *fiber.Ctx) error {
 	var req models.SendEmailRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -37,6 +52,18 @@ func (h *EmailHandler) Send(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusAccepted).JSON(res)
 }
 
+// Get returns the current state of one outbox row.
+//
+//	@Summary     Inspect an outbox row
+//	@Description Returns the snapshot, status, attempts, last_error and provider
+//	@Description message id for one queued/sent/dead email.
+//	@Tags        emails
+//	@Produce     json
+//	@Param       id   path     string true "outbox UUID"
+//	@Success     200  {object} models.OutboxResponse
+//	@Failure     400  {object} models.ErrorResponse "id is not a UUID"
+//	@Failure     404  {object} models.ErrorResponse
+//	@Router      /emails/{id} [get]
 func (h *EmailHandler) Get(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {

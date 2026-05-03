@@ -50,6 +50,12 @@ build:
 
 swagger:
 	go run github.com/swaggo/swag/cmd/swag@latest init -g cmd/server/main.go -o docs --parseDependency --parseInternal
+	@if grep -q "github_com" docs/swagger.json; then \
+		echo ""; \
+		echo "WARNING: Found 'github_com' in docs/swagger.json - some types are missing @name aliases."; \
+		exit 1; \
+	fi
+	@echo "swagger: OK"
 
 format:
 	go fmt ./...

@@ -4,6 +4,16 @@
 // adapter packages (sender, clients/custapi, repositories, clock, idgen).
 // Everything below the services layer receives its collaborators through
 // constructor injection.
+//
+//	@title       Copium Communication API
+//	@version     1.0
+//	@description Manages versioned email templates and dispatches emails
+//	@description asynchronously via a DB-backed outbox to a pluggable Sender.
+//	@contact.name  copium maintainers
+//	@license.name  MIT
+//	@host          localhost:8081
+//	@BasePath      /api/v1
+//	@schemes       http https
 package main
 
 import (

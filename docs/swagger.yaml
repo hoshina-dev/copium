@@ -1,0 +1,450 @@
+basePath: /api/v1
+definitions:
+  CreateTemplateRequest:
+    properties:
+      code:
+        maxLength: 128
+        minLength: 1
+        type: string
+      description:
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+    required:
+    - code
+    - name
+    type: object
+  CreateTemplateVersionRequest:
+    properties:
+      body_html:
+        type: string
+      body_text:
+        type: string
+      from_address:
+        type: string
+      params_schema:
+        type: object
+      subject:
+        type: string
+    required:
+    - body_html
+    - params_schema
+    - subject
+    type: object
+  ErrorResponse:
+    properties:
+      error:
+        example: 'not found: template <uuid>'
+        type: string
+    type: object
+  OutboxResponse:
+    properties:
+      attempts:
+        type: integer
+      created_at:
+        type: string
+      id:
+        format: uuid
+        type: string
+      last_error:
+        type: string
+      max_attempts:
+        type: integer
+      provider:
+        type: string
+      provider_message_id:
+        type: string
+      scheduled_at:
+        type: string
+      sent_at:
+        type: string
+      status:
+        example: sent
+        type: string
+      subject:
+        type: string
+      template_version_id:
+        format: uuid
+        type: string
+      to_address:
+        type: string
+      updated_at:
+        type: string
+      user_id:
+        format: uuid
+        type: string
+    type: object
+  SendEmailRequest:
+    properties:
+      params:
+        type: object
+      template_id:
+        format: uuid
+        type: string
+      user_id:
+        format: uuid
+        type: string
+    required:
+    - template_id
+    - user_id
+    type: object
+  SendEmailResponse:
+    properties:
+      outbox_id:
+        format: uuid
+        type: string
+      status:
+        example: queued
+        type: string
+    type: object
+  SetActiveVersionRequest:
+    properties:
+      version_id:
+        format: uuid
+        type: string
+    required:
+    - version_id
+    type: object
+  TemplateResponse:
+    properties:
+      active_version_id:
+        format: uuid
+        type: string
+      code:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        format: uuid
+        type: string
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  TemplateVersionResponse:
+    properties:
+      body_html:
+        type: string
+      body_text:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: string
+      from_address:
+        type: string
+      id:
+        format: uuid
+        type: string
+      params_schema:
+        type: object
+      subject:
+        type: string
+      template_id:
+        format: uuid
+        type: string
+      version:
+        type: integer
+    type: object
+host: localhost:8081
+info:
+  contact:
+    name: copium maintainers
+  description: |-
+    Manages versioned email templates and dispatches emails
+    asynchronously via a DB-backed outbox to a pluggable Sender.
+  license:
+    name: MIT
+  title: Copium Communication API
+  version: "1.0"
+paths:
+  /emails/{id}:
+    get:
+      description: |-
+        Returns the snapshot, status, attempts, last_error and provider
+        message id for one queued/sent/dead email.
+      parameters:
+      - description: outbox UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/OutboxResponse'
+        "400":
+          description: id is not a UUID
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Inspect an outbox row
+      tags:
+      - emails
+  /emails/send:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Validates params against the active template version's JSON Schema,
+        resolves the recipient via custapi, renders the message, and writes
+        a snapshot to email_outbox. The worker performs the actual send.
+      parameters:
+      - description: Send request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/SendEmailRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/SendEmailResponse'
+        "400":
+          description: invalid JSON or params failed schema
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: template or user not found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "502":
+          description: custapi unreachable
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Enqueue an email
+      tags:
+      - emails
+  /healthz:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Liveness probe
+      tags:
+      - health
+  /readyz:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Readiness probe
+      tags:
+      - health
+  /templates:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/TemplateResponse'
+            type: array
+      summary: List templates
+      tags:
+      - templates
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Template metadata
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/CreateTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/TemplateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: code already exists
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Create a template
+      tags:
+      - templates
+  /templates/{id}:
+    get:
+      parameters:
+      - description: template UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/TemplateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Get a template
+      tags:
+      - templates
+  /templates/{id}/active-version:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: template UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Target version id
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/SetActiveVersionRequest'
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: version belongs to another template
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Set the active version
+      tags:
+      - templates
+  /templates/{id}/versions:
+    get:
+      parameters:
+      - description: template UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/TemplateVersionResponse'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: List template versions
+      tags:
+      - templates
+    post:
+      consumes:
+      - application/json
+      description: Validates that params_schema is itself a compilable JSON Schema.
+      parameters:
+      - description: template UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Version content
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/CreateTemplateVersionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/TemplateVersionResponse'
+        "400":
+          description: invalid body or schema
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: template not found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Create a template version
+      tags:
+      - templates
+  /templates/{id}/versions/{version}:
+    get:
+      parameters:
+      - description: template UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: version number
+        in: path
+        name: version
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/TemplateVersionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Get a template version
+      tags:
+      - templates
+schemes:
+- http
+- https
+swagger: "2.0"
