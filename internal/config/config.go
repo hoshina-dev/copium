@@ -56,10 +56,10 @@ type WorkerConfig struct {
 }
 
 type OtelConfig struct {
-	Enabled         bool
-	ServiceName     string
-	OTLPEndpoint    string
-	OTLPInsecure    bool
+	Enabled      bool
+	ServiceName  string
+	OTLPEndpoint string
+	OTLPInsecure bool
 }
 
 var validProviders = map[string]struct{}{

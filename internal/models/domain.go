@@ -21,11 +21,11 @@ const (
 // EmailTemplate is the logical template; ActiveVersionID points at the
 // version used when callers reference this template by id/code.
 type EmailTemplate struct {
-	ID              uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
-	Code            string         `gorm:"type:text;uniqueIndex;not null"`
-	Name            string         `gorm:"type:text;not null"`
-	Description     string         `gorm:"type:text"`
-	ActiveVersionID *uuid.UUID     `gorm:"type:uuid"`
+	ID              uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Code            string     `gorm:"type:text;uniqueIndex;not null"`
+	Name            string     `gorm:"type:text;not null"`
+	Description     string     `gorm:"type:text"`
+	ActiveVersionID *uuid.UUID `gorm:"type:uuid"`
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	DeletedAt       gorm.DeletedAt `gorm:"index"`

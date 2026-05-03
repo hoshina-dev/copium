@@ -211,10 +211,10 @@ func (f *FakeUserResolver) ResolveEmail(_ context.Context, id uuid.UUID) (string
 // --- FakeSender ---
 
 type FakeSender struct {
-	Sent     []sender.Message
-	SendErr  error
-	NameStr  string
-	NextID   string
+	Sent    []sender.Message
+	SendErr error
+	NameStr string
+	NextID  string
 }
 
 func NewFakeSender() *FakeSender { return &FakeSender{NameStr: "fake"} }

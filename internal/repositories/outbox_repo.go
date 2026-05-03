@@ -52,12 +52,14 @@ func (r *OutboxRepo) ClaimDue(ctx context.Context, now time.Time, limit int) ([]
 		for rows.Next() {
 			var id uuid.UUID
 			if err := rows.Scan(&id); err != nil {
-				rows.Close()
+				_ = rows.Close()
 				return err
 			}
 			ids = append(ids, id)
 		}
-		rows.Close()
+		if err := rows.Close(); err != nil {
+			return err
+		}
 		if len(ids) == 0 {
 			return nil
 		}

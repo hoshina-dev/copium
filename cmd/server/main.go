@@ -105,7 +105,7 @@ func main() {
 	if cfg.Worker.Enabled {
 		w := worker.New(worker.Deps{
 			Store: outRepo, Sender: snd, Clock: clk,
-			BatchSize: cfg.Worker.BatchSize,
+			BatchSize:    cfg.Worker.BatchSize,
 			PollInterval: cfg.Worker.PollInterval,
 		})
 		go w.Run(rootCtx)

@@ -60,7 +60,7 @@ func (c *Client) GetUserByID(ctx context.Context, id uuid.UUID) (*User, error) {
 	if err != nil {
 		return nil, apperrors.Upstream("custapi: GET "+url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	switch resp.StatusCode {
 	case http.StatusOK:

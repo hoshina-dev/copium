@@ -21,8 +21,8 @@ import (
 )
 
 var (
-	once     sync.Once
-	shared   *gorm.DB
+	once      sync.Once
+	shared    *gorm.DB
 	sharedErr error
 )
 

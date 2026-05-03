@@ -10,14 +10,14 @@ import (
 
 func TestLoad_Defaults(t *testing.T) {
 	getenv := stubEnv(map[string]string{
-		"CUSTAPI_BASE_URL":      "http://custapi.local",
-		"DB_HOST":               "db",
-		"DB_PORT":               "5432",
-		"DB_USER":               "u",
-		"DB_PASSWORD":           "p",
-		"DB_NAME":               "copium",
-		"DB_SSLMODE":            "disable",
-		"EMAIL_DEFAULT_FROM":    "noreply@example.com",
+		"CUSTAPI_BASE_URL":   "http://custapi.local",
+		"DB_HOST":            "db",
+		"DB_PORT":            "5432",
+		"DB_USER":            "u",
+		"DB_PASSWORD":        "p",
+		"DB_NAME":            "copium",
+		"DB_SSLMODE":         "disable",
+		"EMAIL_DEFAULT_FROM": "noreply@example.com",
 	})
 	cfg, err := config.Load(getenv)
 	if err != nil {
