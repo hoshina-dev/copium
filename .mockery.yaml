@@ -1,0 +1,23 @@
+with-expecter: true
+quiet: false
+disable-version-string: true
+mockname: "Mock{{.InterfaceName}}"
+filename: "mock_{{.InterfaceName | snakecase}}.go"
+outpkg: "mocks"
+dir: "mocks"
+packages:
+  github.com/hoshina-dev/copium/internal/services:
+    interfaces:
+      OutboxRepository:
+      TemplateRepository:
+      TemplateVersionRepository:
+      UserResolver:
+      Renderer:
+      Sender:
+      Clock:
+      IDGen:
+  github.com/hoshina-dev/copium/internal/worker:
+    interfaces:
+      OutboxStore:
+      Sender:
+      Clock:
