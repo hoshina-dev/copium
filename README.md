@@ -47,6 +47,27 @@ are also injected so tests are deterministic.
 
 Copy `.env.example` to `.env` and adjust. See the file for every supported variable.
 
+## API documentation
+
+The server exposes two OpenAPI UIs out of the box:
+
+| URL | UI |
+| --- | --- |
+| `http://localhost:8081/swagger/index.html` | Classic Swagger UI |
+| `http://localhost:8081/scalar` | Scalar UI (modern, `data-url=/swagger/doc.json`) |
+| `http://localhost:8081/swagger/doc.json` | Raw OpenAPI 2.0 spec (machine-readable) |
+
+The committed `docs/` package is generated from swag annotations on handlers
+plus the `@title`/`@BasePath` block in `cmd/server/main.go`. Regenerate after
+changing any annotation:
+
+```sh
+make swagger        # writes docs/docs.go, docs/swagger.json, docs/swagger.yaml
+```
+
+The Make target fails if any model still leaks the Go import path
+(`github_com_*`) so reviewers always see clean type names in the spec.
+
 ## Local dev with Docker
 
 The bundled compose file boots Postgres 18 (with migrations + seed auto-applied

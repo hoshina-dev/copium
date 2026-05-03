@@ -1,7 +1,10 @@
 package routes_test
 
 import (
+	"encoding/json"
+	"io"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,6 +41,43 @@ func TestRoutes_NotFound404(t *testing.T) {
 	}
 	if resp.StatusCode != 404 {
 		t.Errorf("got %d", resp.StatusCode)
+	}
+}
+
+func TestRoutes_SwaggerSpecServed(t *testing.T) {
+	app := buildApp(t)
+	resp, err := app.Test(httptest.NewRequest("GET", "/swagger/doc.json", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("doc.json -> %d", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	var spec map[string]any
+	if err := json.Unmarshal(body, &spec); err != nil {
+		t.Fatalf("doc.json must be valid JSON: %v", err)
+	}
+	if _, ok := spec["paths"]; !ok {
+		t.Errorf("doc.json missing 'paths' key; got: %s", body[:min(200, len(body))])
+	}
+}
+
+func TestRoutes_ScalarUIServed(t *testing.T) {
+	app := buildApp(t)
+	resp, err := app.Test(httptest.NewRequest("GET", "/scalar", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("/scalar -> %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("expected HTML, got Content-Type=%q", ct)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "/swagger/doc.json") {
+		t.Errorf("scalar HTML must reference doc.json; got: %s", body)
 	}
 }
 
