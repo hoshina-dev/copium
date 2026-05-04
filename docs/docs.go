@@ -558,8 +558,7 @@ const docTemplate = `{
         "SendEmailRequest": {
             "type": "object",
             "required": [
-                "template_id",
-                "user_id"
+                "template_id"
             ],
             "properties": {
                 "params": {
@@ -569,9 +568,14 @@ const docTemplate = `{
                     "type": "string",
                     "format": "uuid"
                 },
+                "to_address": {
+                    "type": "string",
+                    "example": "someone@example.com"
+                },
                 "user_id": {
                     "type": "string",
-                    "format": "uuid"
+                    "format": "uuid",
+                    "example": "00000000-0000-0000-0000-000000000000"
                 }
             }
         },

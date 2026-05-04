@@ -83,12 +83,15 @@ definitions:
       template_id:
         format: uuid
         type: string
+      to_address:
+        example: someone@example.com
+        type: string
       user_id:
+        example: 00000000-0000-0000-0000-000000000000
         format: uuid
         type: string
     required:
     - template_id
-    - user_id
     type: object
   SendEmailResponse:
     properties:
