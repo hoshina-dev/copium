@@ -185,6 +185,23 @@ func (f *FakeOutboxRepo) GetByID(_ context.Context, id uuid.UUID) (*models.Email
 	return o, nil
 }
 
+func (f *FakeOutboxRepo) List(_ context.Context, filter models.OutboxListFilter) ([]*models.EmailOutbox, error) {
+	out := make([]*models.EmailOutbox, 0, len(f.Rows))
+	for _, o := range f.Rows {
+		if filter.Status != "" && string(o.Status) != filter.Status {
+			continue
+		}
+		if filter.From != nil && o.CreatedAt.Before(*filter.From) {
+			continue
+		}
+		if filter.To != nil && !o.CreatedAt.Before(*filter.To) {
+			continue
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
 // --- FakeUserResolver ---
 
 type FakeUserResolver struct {

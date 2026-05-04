@@ -58,7 +58,7 @@ export interface SendEmailResponse {
 }
 
 export type OutboxStatus =
-  | "pending"
+  | "queued"
   | "sending"
   | "sent"
   | "failed"

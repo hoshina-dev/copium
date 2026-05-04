@@ -4,6 +4,8 @@
 package handlers
 
 import (
+	"time"
+
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -74,4 +76,53 @@ func (h *EmailHandler) Get(c *fiber.Ctx) error {
 		return err
 	}
 	return c.JSON(models.OutboxToResponse(row))
+}
+
+// List returns recent outbox rows, optionally narrowed by status and a
+// created_at time window. Designed for the web UI "queue" view.
+//
+//	@Summary     List outbox rows
+//	@Description Returns recent outbox rows newest-first, optionally narrowed by
+//	@Description status and a created_at window. `from`/`to` accept RFC3339 time.
+//	@Tags        emails
+//	@Produce     json
+//	@Param       status query string false "queued|sending|sent|failed|dead"
+//	@Param       from   query string false "RFC3339 start (inclusive)"
+//	@Param       to     query string false "RFC3339 end (exclusive)"
+//	@Param       limit  query int    false "max rows (default 200, max 1000)"
+//	@Success     200    {array}  models.OutboxResponse
+//	@Failure     400    {object} models.ErrorResponse "bad query params"
+//	@Router      /emails [get]
+func (h *EmailHandler) List(c *fiber.Ctx) error {
+	f := models.OutboxListFilter{Status: c.Query("status")}
+	if s := c.Query("from"); s != "" {
+		t, err := time.Parse(time.RFC3339, s)
+		if err != nil {
+			return apperrors.InvalidParams("from must be RFC3339", err)
+		}
+		f.From = &t
+	}
+	if s := c.Query("to"); s != "" {
+		t, err := time.Parse(time.RFC3339, s)
+		if err != nil {
+			return apperrors.InvalidParams("to must be RFC3339", err)
+		}
+		f.To = &t
+	}
+	if c.Query("limit") != "" {
+		n := c.QueryInt("limit")
+		if n <= 0 {
+			return apperrors.InvalidParams("limit must be positive", nil)
+		}
+		f.Limit = n
+	}
+	rows, err := h.svc.ListOutbox(c.Context(), f)
+	if err != nil {
+		return err
+	}
+	out := make([]models.OutboxResponse, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, models.OutboxToResponse(r))
+	}
+	return c.JSON(out)
 }

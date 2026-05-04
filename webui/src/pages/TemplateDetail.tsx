@@ -6,17 +6,75 @@ import {
   Code,
   Group,
   Loader,
+  Menu,
   Stack,
   Table,
   Text,
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconPlus, IconRocket } from "@tabler/icons-react";
+import { IconChevronDown, IconCopy, IconPlus, IconRocket } from "@tabler/icons-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { templatesApi } from "../api/templates";
 import type { Template, TemplateVersion } from "../api/types";
+
+function NewVersionMenu({
+  templateId,
+  versions,
+}: {
+  templateId: string;
+  versions: TemplateVersion[];
+}) {
+  const sorted = [...versions].sort((a, b) => b.version - a.version);
+  const latest = sorted[0];
+  const blank = `/templates/${templateId}/versions/new`;
+  const latestHref = latest ? `${blank}/from/${latest.version}` : blank;
+
+  if (!latest) {
+    return (
+      <Button component={Link} to={blank} leftSection={<IconPlus size={16} />}>
+        New version
+      </Button>
+    );
+  }
+
+  return (
+    <Menu shadow="md" width={260} position="bottom-end">
+      <Menu.Target>
+        <Button
+          leftSection={<IconPlus size={16} />}
+          rightSection={<IconChevronDown size={14} />}
+          component={Link}
+          // Default click uses the latest version as the base (user's
+          // requested default). The dropdown lets them pick any prior
+          // version or start from a blank template.
+          to={latestHref}
+        >
+          New version
+        </Button>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Label>Base new version on…</Menu.Label>
+        {sorted.map((v, i) => (
+          <Menu.Item
+            key={v.id}
+            component={Link}
+            to={`${blank}/from/${v.version}`}
+            leftSection={<IconCopy size={14} />}
+            rightSection={i === 0 ? <Badge size="xs">latest</Badge> : null}
+          >
+            v{v.version} — {v.subject || "(no subject)"}
+          </Menu.Item>
+        ))}
+        <Menu.Divider />
+        <Menu.Item component={Link} to={blank}>
+          Start from a blank template
+        </Menu.Item>
+      </Menu.Dropdown>
+    </Menu>
+  );
+}
 
 export function TemplateDetailPage() {
   const { id = "" } = useParams();
@@ -69,13 +127,7 @@ export function TemplateDetailPage() {
           >
             Test send
           </Button>
-          <Button
-            leftSection={<IconPlus size={16} />}
-            component={Link}
-            to={`/templates/${template.id}/versions/new`}
-          >
-            New version
-          </Button>
+          <NewVersionMenu templateId={template.id} versions={versions} />
         </Group>
       </Group>
 

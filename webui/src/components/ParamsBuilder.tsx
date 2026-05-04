@@ -80,16 +80,21 @@ export function ParamsBuilder({ params, onChange, usedNames }: ParamsBuilderProp
   return (
     <Stack gap="sm">
       <Group justify="space-between" align="center">
-        <Text fw={500}>Params</Text>
+        <div>
+          <Text fw={500}>Variables</Text>
+          <Text size="xs" c="dimmed">
+            Things that change per send (recipient name, order id, amount…)
+          </Text>
+        </div>
         <Button size="xs" leftSection={<IconPlus size={14} />} onClick={add}>
-          Add param
+          Add variable
         </Button>
       </Group>
 
       {params.length === 0 && (
         <Alert variant="light" color="gray">
-          No params yet. Add one and you'll be able to drag it into the subject or body
-          to insert <code>{"{{.field}}"}</code>.
+          No variables yet. Click <b>Add variable</b> — then click or drag its chip
+          into the subject or body to include it.
         </Alert>
       )}
 
@@ -115,7 +120,7 @@ export function ParamsBuilder({ params, onChange, usedNames }: ParamsBuilderProp
                 <TextInput
                   flex={1}
                   size="xs"
-                  placeholder="param_name"
+                  placeholder="variable_name (e.g. first_name)"
                   value={p.name}
                   onChange={(e) => patch(p.id, { name: e.currentTarget.value.trim() })}
                   error={nameError}
@@ -128,10 +133,10 @@ export function ParamsBuilder({ params, onChange, usedNames }: ParamsBuilderProp
                   onChange={(v) => v && patch(p.id, { kind: v as ParamKind })}
                   allowDeselect={false}
                 />
-                <Tooltip label="Required when sending">
+                <Tooltip label="Must be supplied on every send">
                   <Switch
                     size="xs"
-                    label="req"
+                    label="required"
                     checked={p.required}
                     onChange={(e) => patch(p.id, { required: e.currentTarget.checked })}
                   />

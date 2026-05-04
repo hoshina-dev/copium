@@ -9,6 +9,7 @@ import { TemplateDetailPage } from "./pages/TemplateDetail";
 import { VersionEditorPage } from "./pages/VersionEditor";
 import { DispatchPage } from "./pages/Dispatch";
 import { OutboxDetailPage } from "./pages/OutboxDetail";
+import { OutboxListPage } from "./pages/OutboxList";
 
 const NAV = [
   { to: "/templates", label: "Templates", icon: IconTemplate },
@@ -65,10 +66,14 @@ export function App() {
           <Route path="/templates/new" element={<TemplateNewPage />} />
           <Route path="/templates/:id" element={<TemplateDetailPage />} />
           <Route path="/templates/:id/versions/new" element={<VersionEditorPage mode="new" />} />
+          <Route
+            path="/templates/:id/versions/new/from/:baseVersion"
+            element={<VersionEditorPage mode="new" />}
+          />
           <Route path="/templates/:id/versions/:version" element={<VersionEditorPage mode="view" />} />
           <Route path="/dispatch" element={<DispatchPage />} />
           <Route path="/dispatch/:templateId" element={<DispatchPage />} />
-          <Route path="/outbox" element={<OutboxDetailPage />} />
+          <Route path="/outbox" element={<OutboxListPage />} />
           <Route path="/outbox/:id" element={<OutboxDetailPage />} />
           <Route path="*" element={<Navigate to="/templates" replace />} />
         </Routes>

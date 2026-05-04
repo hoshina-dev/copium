@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Badge,
@@ -14,19 +14,22 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { IconRefresh, IconSearch } from "@tabler/icons-react";
+import { IconArrowLeft, IconRefresh, IconSearch } from "@tabler/icons-react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { emailsApi } from "../api/emails";
 import type { OutboxRow } from "../api/types";
 
 const STATUS_COLOR: Record<string, string> = {
-  pending: "gray",
+  queued: "gray",
   sending: "blue",
   sent: "green",
   failed: "yellow",
   dead: "red",
 };
+
+const POLL_MS = 3000;
+const TERMINAL = new Set(["sent", "dead"]);
 
 export function OutboxDetailPage() {
   const { id: routeId } = useParams();
@@ -49,9 +52,30 @@ export function OutboxDetailPage() {
     if (routeId) void load(routeId);
   }, [routeId]);
 
+  const pollRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!routeId || !row || TERMINAL.has(row.status)) {
+      if (pollRef.current != null) window.clearInterval(pollRef.current);
+      return;
+    }
+    pollRef.current = window.setInterval(() => void load(routeId), POLL_MS);
+    return () => {
+      if (pollRef.current != null) window.clearInterval(pollRef.current);
+    };
+  }, [routeId, row?.status]);
+
   return (
     <Stack>
-      <Title order={2}>Outbox</Title>
+      <Group>
+        <Button
+          variant="default"
+          leftSection={<IconArrowLeft size={16} />}
+          onClick={() => navigate("/outbox")}
+        >
+          Back to queue
+        </Button>
+        <Title order={2}>Outbox entry</Title>
+      </Group>
       <Group>
         <TextInput
           flex={1}

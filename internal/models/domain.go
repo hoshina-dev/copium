@@ -79,3 +79,13 @@ type EmailOutbox struct {
 }
 
 func (EmailOutbox) TableName() string { return "email_outbox" }
+
+// OutboxListFilter narrows queries against email_outbox. Zero-valued fields
+// are ignored. Lives in models so both repositories and services can share
+// it without an import cycle.
+type OutboxListFilter struct {
+	Status string
+	From   *time.Time // inclusive, filters on created_at
+	To     *time.Time // exclusive, filters on created_at
+	Limit  int        // defaults to 200, capped at 1000 in the repo
+}

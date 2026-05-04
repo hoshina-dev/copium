@@ -53,6 +53,7 @@ func NewApp(h Handlers) *fiber.App {
 
 	em := v1.Group("/emails")
 	em.Post("/send", h.Email.Send)
+	em.Get("/", h.Email.List)
 	em.Get("/:id", h.Email.Get)
 
 	// Mount the embedded Vite build LAST so /api/v1, /healthz, /readyz,

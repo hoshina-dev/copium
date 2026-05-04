@@ -20,6 +20,32 @@ func (r *OutboxRepo) Create(ctx context.Context, o *models.EmailOutbox) error {
 	return r.db.WithContext(ctx).Create(o).Error
 }
 
+// List returns outbox rows matching the filter, newest first.
+func (r *OutboxRepo) List(ctx context.Context, f models.OutboxListFilter) ([]*models.EmailOutbox, error) {
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 200
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	q := r.db.WithContext(ctx).Model(&models.EmailOutbox{})
+	if f.Status != "" {
+		q = q.Where("status = ?", f.Status)
+	}
+	if f.From != nil {
+		q = q.Where("created_at >= ?", *f.From)
+	}
+	if f.To != nil {
+		q = q.Where("created_at < ?", *f.To)
+	}
+	var rows []*models.EmailOutbox
+	if err := q.Order("created_at DESC").Limit(limit).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
 func (r *OutboxRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.EmailOutbox, error) {
 	var o models.EmailOutbox
 	if err := r.db.WithContext(ctx).First(&o, "id = ?", id).Error; err != nil {

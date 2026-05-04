@@ -36,6 +36,7 @@ type TemplateVersionRepository interface {
 type OutboxRepository interface {
 	Create(ctx context.Context, o *models.EmailOutbox) error
 	GetByID(ctx context.Context, id uuid.UUID) (*models.EmailOutbox, error)
+	List(ctx context.Context, f models.OutboxListFilter) ([]*models.EmailOutbox, error)
 }
 
 // --- collaborators (signatures match the adapter packages so they satisfy

@@ -142,6 +142,10 @@ func (s *EmailService) GetOutbox(ctx context.Context, id uuid.UUID) (*models.Ema
 	return s.deps.Outbox.GetByID(ctx, id)
 }
 
+func (s *EmailService) ListOutbox(ctx context.Context, f models.OutboxListFilter) ([]*models.EmailOutbox, error) {
+	return s.deps.Outbox.List(ctx, f)
+}
+
 func cloneParams(p models.JSONMap) models.JSONMap {
 	if p == nil {
 		return models.JSONMap{}

@@ -73,7 +73,7 @@ interface Props {
 type ActiveField = "subject" | "html" | "text";
 
 export function VersionEditorPage({ mode }: Props) {
-  const { id = "", version: versionParam } = useParams();
+  const { id = "", version: versionParam, baseVersion } = useParams();
   const navigate = useNavigate();
 
   const [subject, setSubject] = useState(mode === "new" ? "Welcome, {{.name}}!" : "");
@@ -106,17 +106,33 @@ export function VersionEditorPage({ mode }: Props) {
   const textRef = useRef<DroppableTextareaHandle | null>(null);
 
   useEffect(() => {
-    if (mode !== "view" || !versionParam) return;
-    void (async () => {
-      const v = await templatesApi.getVersion(id, Number(versionParam));
-      setLoaded(v);
-      setSubject(v.subject);
-      setBodyHtml(v.body_html);
-      setBodyText(v.body_text ?? "");
-      setFromAddress(v.from_address ?? "");
-      setParams(schemaToParams(v.params_schema));
-    })();
-  }, [id, mode, versionParam]);
+    if (mode === "view" && versionParam) {
+      void (async () => {
+        const v = await templatesApi.getVersion(id, Number(versionParam));
+        setLoaded(v);
+        setSubject(v.subject);
+        setBodyHtml(v.body_html);
+        setBodyText(v.body_text ?? "");
+        setFromAddress(v.from_address ?? "");
+        setParams(schemaToParams(v.params_schema));
+      })();
+      return;
+    }
+    // Creating a new version seeded from an existing one. We copy the
+    // full draft (subject/body/params/from) so the user can iterate
+    // instead of rebuilding from scratch.
+    if (mode === "new" && baseVersion) {
+      void (async () => {
+        const v = await templatesApi.getVersion(id, Number(baseVersion));
+        setLoaded(v);
+        setSubject(v.subject);
+        setBodyHtml(v.body_html);
+        setBodyText(v.body_text ?? "");
+        setFromAddress(v.from_address ?? "");
+        setParams(schemaToParams(v.params_schema));
+      })();
+    }
+  }, [id, mode, versionParam, baseVersion]);
 
   const refs = useMemo(() => collectRefs(subject, bodyHtml, bodyText), [subject, bodyHtml, bodyText]);
 
@@ -187,6 +203,11 @@ export function VersionEditorPage({ mode }: Props) {
           <Title order={3}>
             {mode === "new" ? "New version" : `Version v${loaded?.version ?? versionParam}`}
           </Title>
+          {mode === "new" && baseVersion && (
+            <Badge variant="light" color="blue">
+              based on v{baseVersion}
+            </Badge>
+          )}
         </Group>
         {mode === "new" && (
           <Button onClick={save} loading={submitting}>
@@ -195,23 +216,25 @@ export function VersionEditorPage({ mode }: Props) {
         )}
       </Group>
 
-      <Alert variant="light" color="blue">
-        Build your template with <b>plain text</b> and add params on the right. Click a chip
-        (or drag it) to drop <Code>{"{{.field}}"}</Code> into the subject or body. The
-        server validates each send against the schema we generate from your params - no
-        JSON required.
+      <Alert variant="light" color="blue" title="How this works">
+        Write your email on the left. On the right, add the pieces that change between
+        sends (like <b>name</b> or <b>order_id</b>) — we call them <b>variables</b>.
+        Click a variable chip to drop it into the subject or body, or drag it anywhere.
+        The live preview on the right fills in sample values so you can see what the
+        email will look like before you save.
       </Alert>
 
       {undefinedRefs.length > 0 && !readOnly && (
-        <Alert color="yellow" title="Undefined params used">
-          The template references{" "}
+        <Alert color="yellow" title="Missing variables">
+          Your email uses{" "}
           {undefinedRefs.map((r, i) => (
             <span key={r}>
               <Code>{`{{.${r}}}`}</Code>
               {i < undefinedRefs.length - 1 ? ", " : ""}
             </span>
           ))}{" "}
-          but they're not in the params list. Either add them or remove the reference.
+          but you haven't added them on the right. Add each variable, or remove the
+          mention from your email — otherwise sends will fail.
         </Alert>
       )}
 
@@ -229,7 +252,7 @@ export function VersionEditorPage({ mode }: Props) {
                     subjectRef.current?.focus();
                     subjectRef.current?.insertAtCaret(`{{.${n}}}`);
                   }}
-                  hint="Click a chip to insert it into Subject (or drag it anywhere)"
+                  hint="Click a variable to drop it into the subject (or drag it anywhere)"
                 />
                 <DroppableTextInput
                   ref={subjectRef}
@@ -256,8 +279,8 @@ export function VersionEditorPage({ mode }: Props) {
                 </Group>
                 <Tabs defaultValue="html" onChange={(v) => v && setActiveField(v as ActiveField)}>
                   <Tabs.List>
-                    <Tabs.Tab value="html">HTML</Tabs.Tab>
-                    <Tabs.Tab value="text">Plain text</Tabs.Tab>
+                    <Tabs.Tab value="html">Rich (HTML)</Tabs.Tab>
+                    <Tabs.Tab value="text">Plain text fallback</Tabs.Tab>
                   </Tabs.List>
 
                   <Tabs.Panel value="html" pt="sm">
