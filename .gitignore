@@ -35,3 +35,11 @@ go.work.sum
 !/.idea/runConfigurations/
 !/.idea/.gitignore
 .vscode/
+
+# webui (Vite + React) - never commit installed deps or build output, but DO
+# keep dist/.gitkeep so go:embed all:dist works on a fresh checkout before
+# `make webui-build` has run.
+webui/node_modules/
+webui/dist/*
+!webui/dist/.gitkeep
+webui/tsconfig.tsbuildinfo

@@ -20,7 +20,11 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
-    emptyOutDir: true,
+    // Don't blow away dist/.gitkeep on every build - that placeholder is what
+    // makes `go:embed all:dist` valid on a fresh checkout. We rely on Vite
+    // overwriting hashed asset names (so stale chunks are replaced, but the
+    // .gitkeep survives).
+    emptyOutDir: false,
     sourcemap: true,
   },
 });

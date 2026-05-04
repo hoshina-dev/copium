@@ -1,4 +1,4 @@
-.PHONY: install test test-unit test-watch cover lint mocks run build deps swagger format tidy
+.PHONY: install test test-unit test-watch cover lint mocks run build deps swagger format tidy webui-install webui-dev webui-build webui-clean
 
 # --- dev loop ---
 
@@ -41,10 +41,29 @@ run:
 run-worker:
 	go run ./cmd/worker
 
-build:
+build: webui-build
 	mkdir -p bin
 	go build -o bin/copium ./cmd/server
 	go build -o bin/copium-worker ./cmd/worker
+
+# --- web UI ---
+# Install npm deps once. Re-run after editing webui/package.json.
+webui-install:
+	cd webui && npm install
+
+# Hot-reloading Vite dev server on http://localhost:5173. Requires `make run`
+# in another terminal so the proxy has a backend to talk to.
+webui-dev: webui-install
+	cd webui && npm run dev
+
+# Production build embedded into the Go binary (webui/dist -> //go:embed).
+webui-build: webui-install
+	cd webui && npm run build
+
+webui-clean:
+	rm -rf webui/dist webui/node_modules
+	mkdir -p webui/dist
+	cp /dev/null webui/dist/.gitkeep || true
 
 # --- code gen / docs ---
 

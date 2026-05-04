@@ -1,0 +1,2 @@
+Placeholder so go:embed all:dist works on a fresh checkout. Vite is configured
+with emptyOutDir=false so this file survives `npm run build`.
