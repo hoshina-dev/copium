@@ -72,6 +72,20 @@ func (r *TemplateRepo) SetActiveVersion(ctx context.Context, templateID, version
 	return nil
 }
 
+// Delete soft-deletes the template (GORM populates deleted_at). Versions
+// and outbox rows are intentionally left alone so audit/history links keep
+// working; the deleted template simply stops appearing in List/Get.
+func (r *TemplateRepo) Delete(ctx context.Context, id uuid.UUID) error {
+	res := r.db.WithContext(ctx).Delete(&models.EmailTemplate{}, "id = ?", id)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return apperrors.NotFound("template "+id.String(), nil)
+	}
+	return nil
+}
+
 func isUniqueViolation(err error) bool {
 	if err == nil {
 		return false

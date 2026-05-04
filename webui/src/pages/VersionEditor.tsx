@@ -6,37 +6,27 @@ import {
   Button,
   Card,
   Code,
-  Collapse,
   Grid,
   Group,
   Stack,
   Tabs,
   Text,
+  Textarea,
+  TextInput,
   Title,
   Tooltip,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import {
-  IconArrowLeft,
-  IconChevronDown,
-  IconChevronUp,
-  IconCode,
-} from "@tabler/icons-react";
+import { IconArrowLeft, IconPlayerPlay, IconRefresh } from "@tabler/icons-react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { templatesApi } from "../api/templates";
-import type { CreateTemplateVersionRequest, TemplateVersion } from "../api/types";
-import { JsonEditor } from "../components/JsonEditor";
+import type {
+  CreateTemplateVersionRequest,
+  PreviewTemplateResponse,
+  TemplateVersion,
+} from "../api/types";
 import { HtmlPreview } from "../components/HtmlPreview";
-import {
-  DroppableTextarea,
-  type DroppableTextareaHandle,
-} from "../components/DroppableTextarea";
-import {
-  DroppableTextInput,
-  type DroppableTextInputHandle,
-} from "../components/DroppableTextInput";
-import { ParamChips } from "../components/ParamChips";
 import { ParamsBuilder } from "../components/ParamsBuilder";
 import { newParam, type Param } from "../params/types";
 import { paramsToSchema, schemaToParams } from "../params/schema";
@@ -52,29 +42,23 @@ const DEFAULT_BODY_HTML = `<!DOCTYPE html>
 
 const DEFAULT_BODY_TEXT = `Hi {{.name}},\n\nWelcome to Copium!`;
 
-// Pure client-side `text/template`-style placeholder substitution. Lossy
-// but good enough for a live preview - the server is the source of truth
-// and re-renders the email for real before queueing it. We replace
-// `{{.field}}` and `{{ .field }}` with values from the sample params;
-// missing keys are left untouched so the user sees them in the preview.
-function renderPreview(template: string, params: Record<string, unknown>): string {
-  return template.replace(/\{\{\s*\.(\w+)\s*\}\}/g, (_match, key) => {
-    const v = params[key];
-    if (v === undefined) return `{{.${key}}}`;
-    if (typeof v === "boolean") return v ? "yes" : "no";
-    return String(v);
-  });
-}
-
 interface Props {
   mode: "new" | "view";
 }
 
 type ActiveField = "subject" | "html" | "text";
 
+// VersionEditorPage is the write/view form for a single template version.
+// It deliberately keeps the interaction model boring: plain inputs, a
+// visual params builder, and a "Render on server" button that calls the
+// backend preview endpoint so what the operator sees is exactly what a
+// real send will emit. There is no client-side placeholder substitution
+// — past attempts at that drifted from Go's text/template semantics and
+// misled users.
 export function VersionEditorPage({ mode }: Props) {
   const { id = "", version: versionParam, baseVersion } = useParams();
   const navigate = useNavigate();
+  const readOnly = mode === "view";
 
   const [subject, setSubject] = useState(mode === "new" ? "Welcome, {{.name}}!" : "");
   const [bodyHtml, setBodyHtml] = useState(mode === "new" ? DEFAULT_BODY_HTML : "");
@@ -95,15 +79,15 @@ export function VersionEditorPage({ mode }: Props) {
   );
   const [submitting, setSubmitting] = useState(false);
   const [loaded, setLoaded] = useState<TemplateVersion | null>(null);
-  const [activeField, setActiveField] = useState<ActiveField>("subject");
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [advancedJson, setAdvancedJson] = useState<string>("");
-  const [advancedEnabled, setAdvancedEnabled] = useState(false);
-  const readOnly = mode === "view";
 
-  const subjectRef = useRef<DroppableTextInputHandle | null>(null);
-  const htmlRef = useRef<DroppableTextareaHandle | null>(null);
-  const textRef = useRef<DroppableTextareaHandle | null>(null);
+  const [activeField, setActiveField] = useState<ActiveField>("subject");
+  const subjectRef = useRef<HTMLInputElement | null>(null);
+  const htmlRef = useRef<HTMLTextAreaElement | null>(null);
+  const textRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const [preview, setPreview] = useState<PreviewTemplateResponse | null>(null);
+  const [previewErr, setPreviewErr] = useState<string>("");
+  const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => {
     if (mode === "view" && versionParam) {
@@ -118,9 +102,6 @@ export function VersionEditorPage({ mode }: Props) {
       })();
       return;
     }
-    // Creating a new version seeded from an existing one. We copy the
-    // full draft (subject/body/params/from) so the user can iterate
-    // instead of rebuilding from scratch.
     if (mode === "new" && baseVersion) {
       void (async () => {
         const v = await templatesApi.getVersion(id, Number(baseVersion));
@@ -135,48 +116,55 @@ export function VersionEditorPage({ mode }: Props) {
   }, [id, mode, versionParam, baseVersion]);
 
   const refs = useMemo(() => collectRefs(subject, bodyHtml, bodyText), [subject, bodyHtml, bodyText]);
-
-  const sample = useMemo(() => paramsToSchema(params).sample, [params]);
-  const generatedSchema = useMemo(() => paramsToSchema(params).schema, [params]);
-
-  // Keep the advanced JSON view in sync when it's collapsed / not being
-  // edited so the user sees the live spec without surprises.
-  useEffect(() => {
-    if (!advancedEnabled) {
-      setAdvancedJson(JSON.stringify(generatedSchema, null, 2));
-    }
-  }, [generatedSchema, advancedEnabled]);
+  const { schema: generatedSchema, sample } = useMemo(() => paramsToSchema(params), [params]);
 
   const undefinedRefs = useMemo(() => {
     const known = new Set(params.map((p) => p.name));
     return [...refs].filter((r) => !known.has(r));
   }, [refs, params]);
 
-  const previewSubject = useMemo(() => renderPreview(subject, sample), [subject, sample]);
-  const previewHtml = useMemo(() => renderPreview(bodyHtml, sample), [bodyHtml, sample]);
-
   function insertIntoActive(name: string) {
     const snippet = `{{.${name}}}`;
-    if (activeField === "subject") subjectRef.current?.insertAtCaret(snippet);
-    else if (activeField === "html") htmlRef.current?.insertAtCaret(snippet);
-    else textRef.current?.insertAtCaret(snippet);
+    const field = activeField === "subject" ? subjectRef.current : activeField === "html" ? htmlRef.current : textRef.current;
+    if (!field) return;
+    const start = field.selectionStart ?? field.value.length;
+    const end = field.selectionEnd ?? start;
+    const next = field.value.slice(0, start) + snippet + field.value.slice(end);
+    if (activeField === "subject") setSubject(next);
+    else if (activeField === "html") setBodyHtml(next);
+    else setBodyText(next);
+    requestAnimationFrame(() => {
+      field.focus();
+      const caret = start + snippet.length;
+      field.setSelectionRange(caret, caret);
+    });
+  }
+
+  async function runPreview() {
+    setPreviewing(true);
+    setPreviewErr("");
+    try {
+      const out = await templatesApi.preview({
+        subject,
+        body_html: bodyHtml,
+        body_text: bodyText,
+        params_schema: generatedSchema as unknown as CreateTemplateVersionRequest["params_schema"],
+        params: sample as unknown as CreateTemplateVersionRequest["params_schema"],
+      });
+      setPreview(out);
+    } catch (err) {
+      setPreviewErr(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPreviewing(false);
+    }
   }
 
   async function save() {
-    let schemaToSend: Record<string, unknown> = generatedSchema;
-    if (advancedEnabled) {
-      try {
-        schemaToSend = JSON.parse(advancedJson || "{}");
-      } catch (err) {
-        notifications.show({ color: "red", title: "Invalid schema JSON", message: String(err) });
-        return;
-      }
-    }
     const req: CreateTemplateVersionRequest = {
       subject,
       body_html: bodyHtml,
       body_text: bodyText,
-      params_schema: schemaToSend as CreateTemplateVersionRequest["params_schema"],
+      params_schema: generatedSchema as CreateTemplateVersionRequest["params_schema"],
       from_address: fromAddress,
     };
     setSubmitting(true);
@@ -209,20 +197,22 @@ export function VersionEditorPage({ mode }: Props) {
             </Badge>
           )}
         </Group>
-        {mode === "new" && (
-          <Button onClick={save} loading={submitting}>
-            Save version
+        <Group>
+          <Button
+            variant="default"
+            leftSection={<IconPlayerPlay size={16} />}
+            onClick={runPreview}
+            loading={previewing}
+          >
+            Render on server
           </Button>
-        )}
+          {mode === "new" && (
+            <Button onClick={save} loading={submitting}>
+              Save version
+            </Button>
+          )}
+        </Group>
       </Group>
-
-      <Alert variant="light" color="blue" title="How this works">
-        Write your email on the left. On the right, add the pieces that change between
-        sends (like <b>name</b> or <b>order_id</b>) — we call them <b>variables</b>.
-        Click a variable chip to drop it into the subject or body, or drag it anywhere.
-        The live preview on the right fills in sample values so you can see what the
-        email will look like before you save.
-      </Alert>
 
       {undefinedRefs.length > 0 && !readOnly && (
         <Alert color="yellow" title="Missing variables">
@@ -239,70 +229,54 @@ export function VersionEditorPage({ mode }: Props) {
       )}
 
       <Grid gutter="md">
-        {/* Left: editors */}
         <Grid.Col span={{ base: 12, lg: 7 }}>
           <Stack gap="md">
             <Card withBorder padding="sm">
               <Stack gap={6}>
-                <ParamChips
+                <VariableChips
                   params={params}
                   usedNames={refs}
-                  onInsert={(n) => {
-                    setActiveField("subject");
-                    subjectRef.current?.focus();
-                    subjectRef.current?.insertAtCaret(`{{.${n}}}`);
-                  }}
-                  hint="Click a variable to drop it into the subject (or drag it anywhere)"
+                  onInsert={insertIntoActive}
+                  activeField={activeField}
                 />
-                <DroppableTextInput
+                <TextInput
                   ref={subjectRef}
                   label="Subject"
                   value={subject}
                   readOnly={readOnly}
-                  onChange={setSubject}
-                  onFocusChange={(f) => f && setActiveField("subject")}
+                  onChange={(e) => setSubject(e.currentTarget.value)}
+                  onFocus={() => setActiveField("subject")}
                 />
               </Stack>
             </Card>
 
             <Card withBorder padding="sm">
               <Stack gap={6}>
-                <Group justify="space-between">
-                  <Text fw={500} size="sm">
-                    Body
-                  </Text>
-                  <ParamChips
-                    params={params}
-                    usedNames={refs}
-                    onInsert={(n) => insertIntoActive(n)}
-                  />
-                </Group>
+                <Text fw={500} size="sm">Body</Text>
                 <Tabs defaultValue="html" onChange={(v) => v && setActiveField(v as ActiveField)}>
                   <Tabs.List>
-                    <Tabs.Tab value="html">Rich (HTML)</Tabs.Tab>
-                    <Tabs.Tab value="text">Plain text fallback</Tabs.Tab>
+                    <Tabs.Tab value="html">HTML</Tabs.Tab>
+                    <Tabs.Tab value="text">Plain-text fallback</Tabs.Tab>
                   </Tabs.List>
-
                   <Tabs.Panel value="html" pt="sm">
-                    <DroppableTextarea
+                    <Textarea
                       ref={htmlRef}
                       value={bodyHtml}
                       readOnly={readOnly}
-                      onChange={setBodyHtml}
-                      onFocusChange={(f) => f && setActiveField("html")}
+                      onChange={(e) => setBodyHtml(e.currentTarget.value)}
+                      onFocus={() => setActiveField("html")}
                       autosize
                       minRows={14}
                       styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
                     />
                   </Tabs.Panel>
-
                   <Tabs.Panel value="text" pt="sm">
-                    <DroppableTextarea
+                    <Textarea
                       ref={textRef}
                       value={bodyText}
                       readOnly={readOnly}
-                      onChange={setBodyText}
-                      onFocusChange={(f) => f && setActiveField("text")}
+                      onChange={(e) => setBodyText(e.currentTarget.value)}
+                      onFocus={() => setActiveField("text")}
                       autosize
                       minRows={10}
                       styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
@@ -313,39 +287,14 @@ export function VersionEditorPage({ mode }: Props) {
             </Card>
 
             <Card withBorder padding="sm">
-              <DroppableTextInput
+              <TextInput
+                label="From address"
+                description="Optional — falls back to EMAIL_DEFAULT_FROM"
+                placeholder="hello@example.com"
                 value={fromAddress}
                 readOnly={readOnly}
-                onChange={setFromAddress}
-                label="From address"
-                description="Optional - falls back to EMAIL_DEFAULT_FROM"
-                placeholder="hello@example.com"
+                onChange={(e) => setFromAddress(e.currentTarget.value)}
               />
-            </Card>
-          </Stack>
-        </Grid.Col>
-
-        {/* Right: live preview + params builder */}
-        <Grid.Col span={{ base: 12, lg: 5 }}>
-          <Stack gap="md">
-            <Card withBorder padding="sm">
-              <Stack gap="xs">
-                <Group justify="space-between">
-                  <Text fw={500} size="sm">
-                    Live preview
-                  </Text>
-                  <Badge variant="light" size="xs">
-                    rendered with sample values
-                  </Badge>
-                </Group>
-                <div>
-                  <Text size="xs" c="dimmed">
-                    Subject
-                  </Text>
-                  <Text>{previewSubject || <i>(empty)</i>}</Text>
-                </div>
-                <HtmlPreview html={previewHtml} height={360} />
-              </Stack>
             </Card>
 
             <Card withBorder padding="sm">
@@ -355,52 +304,94 @@ export function VersionEditorPage({ mode }: Props) {
                 usedNames={refs}
               />
             </Card>
+          </Stack>
+        </Grid.Col>
 
+        <Grid.Col span={{ base: 12, lg: 5 }}>
+          <Stack gap="md" style={{ position: "sticky", top: 16 }}>
             <Card withBorder padding="sm">
               <Stack gap="xs">
                 <Group justify="space-between">
-                  <Group gap="xs">
-                    <IconCode size={16} />
-                    <Text fw={500} size="sm">
-                      Advanced: raw JSON Schema
-                    </Text>
-                  </Group>
-                  <Tooltip label={showAdvanced ? "Hide" : "Show"}>
-                    <ActionIcon variant="subtle" onClick={() => setShowAdvanced((s) => !s)}>
-                      {showAdvanced ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
+                  <Text fw={500} size="sm">Preview</Text>
+                  <Tooltip label="Re-render with current sample values">
+                    <ActionIcon variant="subtle" onClick={runPreview} loading={previewing}>
+                      <IconRefresh size={16} />
                     </ActionIcon>
                   </Tooltip>
                 </Group>
-                <Collapse in={showAdvanced}>
-                  <Stack gap="xs">
-                    <Text size="xs" c="dimmed">
-                      Generated from the params above. Toggle "Edit raw JSON" if you need a
-                      schema feature the visual builder doesn't expose (nested objects,
-                      <Code>oneOf</Code>, custom keywords...). The visual editor stops syncing
-                      while raw mode is on.
-                    </Text>
-                    <Group>
-                      <Button
-                        size="xs"
-                        variant={advancedEnabled ? "filled" : "default"}
-                        onClick={() => setAdvancedEnabled((v) => !v)}
-                        disabled={readOnly}
-                      >
-                        {advancedEnabled ? "Disable raw mode" : "Edit raw JSON"}
-                      </Button>
-                    </Group>
-                    <JsonEditor
-                      value={advancedJson}
-                      onChange={advancedEnabled ? setAdvancedJson : () => {}}
-                      minRows={8}
-                    />
-                  </Stack>
-                </Collapse>
+                {previewErr && (
+                  <Alert color="red" variant="light" title="Render failed">
+                    {previewErr}
+                  </Alert>
+                )}
+                {!preview && !previewErr && (
+                  <Text size="xs" c="dimmed">
+                    Click <b>Render on server</b> to see the real rendered output. The
+                    server uses the same renderer as live sends, with the sample values
+                    from your variables.
+                  </Text>
+                )}
+                {preview && (
+                  <>
+                    <div>
+                      <Text size="xs" c="dimmed">Subject</Text>
+                      <Text>{preview.subject || <i>(empty)</i>}</Text>
+                    </div>
+                    <Tabs defaultValue="html">
+                      <Tabs.List>
+                        <Tabs.Tab value="html">HTML</Tabs.Tab>
+                        <Tabs.Tab value="text">Text</Tabs.Tab>
+                      </Tabs.List>
+                      <Tabs.Panel value="html" pt="xs">
+                        <HtmlPreview html={preview.body_html} height={420} />
+                      </Tabs.Panel>
+                      <Tabs.Panel value="text" pt="xs">
+                        <Textarea
+                          value={preview.body_text ?? ""}
+                          readOnly
+                          autosize
+                          minRows={10}
+                          styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
+                        />
+                      </Tabs.Panel>
+                    </Tabs>
+                  </>
+                )}
               </Stack>
             </Card>
           </Stack>
         </Grid.Col>
       </Grid>
     </Stack>
+  );
+}
+
+function VariableChips(props: {
+  params: Param[];
+  usedNames: Set<string>;
+  onInsert: (name: string) => void;
+  activeField: ActiveField;
+}) {
+  const { params, usedNames, onInsert, activeField } = props;
+  const named = params.filter((p) => p.name.trim().length > 0);
+  if (named.length === 0) return null;
+  const target = activeField === "subject" ? "subject" : activeField === "html" ? "HTML body" : "text body";
+  return (
+    <Group gap={6}>
+      <Text size="xs" c="dimmed">
+        Click to insert into {target}:
+      </Text>
+      {named.map((p) => (
+        <Badge
+          key={p.id}
+          variant={usedNames.has(p.name) ? "filled" : "light"}
+          color={usedNames.has(p.name) ? "green" : "gray"}
+          style={{ cursor: "pointer" }}
+          onClick={() => onInsert(p.name)}
+        >
+          {p.name}
+        </Badge>
+      ))}
+    </Group>
   );
 }

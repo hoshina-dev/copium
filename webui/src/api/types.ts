@@ -43,6 +43,20 @@ export interface CreateTemplateVersionRequest {
   from_address?: string;
 }
 
+export interface PreviewTemplateRequest {
+  subject: string;
+  body_html: string;
+  body_text?: string;
+  params_schema: JSONObject;
+  params?: JSONObject;
+}
+
+export interface PreviewTemplateResponse {
+  subject: string;
+  body_html: string;
+  body_text?: string;
+}
+
 export interface SendEmailRequest {
   template_id: UUID;
   // Provide EXACTLY one of user_id (resolved via custapi) or to_address

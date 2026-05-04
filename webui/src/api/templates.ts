@@ -2,6 +2,8 @@ import { http } from "./http";
 import type {
   CreateTemplateRequest,
   CreateTemplateVersionRequest,
+  PreviewTemplateRequest,
+  PreviewTemplateResponse,
   Template,
   TemplateVersion,
   UUID,
@@ -13,6 +15,7 @@ export const templatesApi = {
   list: () => http.get<Template[]>(`${base}/`),
   get: (id: UUID) => http.get<Template>(`${base}/${id}`),
   create: (req: CreateTemplateRequest) => http.post<Template>(`${base}/`, req),
+  delete: (id: UUID) => http.del<void>(`${base}/${id}`),
 
   listVersions: (id: UUID) => http.get<TemplateVersion[]>(`${base}/${id}/versions`),
   getVersion: (id: UUID, version: number) =>
@@ -22,4 +25,7 @@ export const templatesApi = {
 
   setActive: (id: UUID, versionId: UUID) =>
     http.patch<void>(`${base}/${id}/active-version`, { version_id: versionId }),
+
+  preview: (req: PreviewTemplateRequest) =>
+    http.post<PreviewTemplateResponse>(`${base}/preview`, req),
 };

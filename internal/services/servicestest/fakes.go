@@ -91,6 +91,14 @@ func (f *FakeTemplateRepo) List(_ context.Context) ([]models.EmailTemplate, erro
 	return out, nil
 }
 
+func (f *FakeTemplateRepo) Delete(_ context.Context, id uuid.UUID) error {
+	if _, ok := f.Templates[id]; !ok {
+		return apperrors.NotFound("template "+id.String(), nil)
+	}
+	delete(f.Templates, id)
+	return nil
+}
+
 func (f *FakeTemplateRepo) SetActiveVersion(_ context.Context, templateID, versionID uuid.UUID) error {
 	t, ok := f.Templates[templateID]
 	if !ok {

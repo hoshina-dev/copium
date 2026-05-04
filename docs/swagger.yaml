@@ -76,6 +76,32 @@ definitions:
         format: uuid
         type: string
     type: object
+  PreviewTemplateRequest:
+    properties:
+      body_html:
+        type: string
+      body_text:
+        type: string
+      params:
+        type: object
+      params_schema:
+        type: object
+      subject:
+        type: string
+    required:
+    - body_html
+    - params_schema
+    - subject
+    type: object
+  PreviewTemplateResponse:
+    properties:
+      body_html:
+        type: string
+      body_text:
+        type: string
+      subject:
+        type: string
+    type: object
   SendEmailRequest:
     properties:
       params:
@@ -166,6 +192,44 @@ info:
   title: Copium Communication API
   version: "1.0"
 paths:
+  /emails:
+    get:
+      description: |-
+        Returns recent outbox rows newest-first, optionally narrowed by
+        status and a created_at window. `from`/`to` accept RFC3339 time.
+      parameters:
+      - description: queued|sending|sent|failed|dead
+        in: query
+        name: status
+        type: string
+      - description: RFC3339 start (inclusive)
+        in: query
+        name: from
+        type: string
+      - description: RFC3339 end (exclusive)
+        in: query
+        name: to
+        type: string
+      - description: max rows (default 200, max 1000)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/OutboxResponse'
+            type: array
+        "400":
+          description: bad query params
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: List outbox rows
+      tags:
+      - emails
   /emails/{id}:
     get:
       description: |-
@@ -303,6 +367,27 @@ paths:
       tags:
       - templates
   /templates/{id}:
+    delete:
+      parameters:
+      - description: template UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Delete a template
+      tags:
+      - templates
     get:
       parameters:
       - description: template UUID
@@ -445,6 +530,32 @@ paths:
           schema:
             $ref: '#/definitions/ErrorResponse'
       summary: Get a template version
+      tags:
+      - templates
+  /templates/preview:
+    post:
+      consumes:
+      - application/json
+      description: Renders subject/body server-side using the same renderer as send.
+      parameters:
+      - description: Draft to render
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/PreviewTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/PreviewTemplateResponse'
+        "400":
+          description: invalid body, schema, or params
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Preview a template draft
       tags:
       - templates
 schemes:

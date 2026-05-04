@@ -20,6 +20,61 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/emails": {
+            "get": {
+                "description": "Returns recent outbox rows newest-first, optionally narrowed by\nstatus and a created_at window. ` + "`" + `from` + "`" + `/` + "`" + `to` + "`" + ` accept RFC3339 time.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "emails"
+                ],
+                "summary": "List outbox rows",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "queued|sending|sent|failed|dead",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339 start (inclusive)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339 end (exclusive)",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "max rows (default 200, max 1000)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/OutboxResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "bad query params",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/emails/send": {
             "post": {
                 "description": "Validates params against the active template version's JSON Schema,\nresolves the recipient via custapi, renders the message, and writes\na snapshot to email_outbox. The worker performs the actual send.",
@@ -222,6 +277,46 @@ const docTemplate = `{
                 }
             }
         },
+        "/templates/preview": {
+            "post": {
+                "description": "Renders subject/body server-side using the same renderer as send.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "templates"
+                ],
+                "summary": "Preview a template draft",
+                "parameters": [
+                    {
+                        "description": "Draft to render",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/PreviewTemplateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/PreviewTemplateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid body, schema, or params",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/templates/{id}": {
             "get": {
                 "produces": [
@@ -246,6 +341,38 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/TemplateResponse"
                         }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "templates"
+                ],
+                "summary": "Delete a template",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "template UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
                     },
                     "400": {
                         "description": "Bad Request",
@@ -552,6 +679,45 @@ const docTemplate = `{
                 "user_id": {
                     "type": "string",
                     "format": "uuid"
+                }
+            }
+        },
+        "PreviewTemplateRequest": {
+            "type": "object",
+            "required": [
+                "body_html",
+                "params_schema",
+                "subject"
+            ],
+            "properties": {
+                "body_html": {
+                    "type": "string"
+                },
+                "body_text": {
+                    "type": "string"
+                },
+                "params": {
+                    "type": "object"
+                },
+                "params_schema": {
+                    "type": "object"
+                },
+                "subject": {
+                    "type": "string"
+                }
+            }
+        },
+        "PreviewTemplateResponse": {
+            "type": "object",
+            "properties": {
+                "body_html": {
+                    "type": "string"
+                },
+                "body_text": {
+                    "type": "string"
+                },
+                "subject": {
+                    "type": "string"
                 }
             }
         },

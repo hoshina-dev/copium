@@ -94,7 +94,7 @@ func main() {
 	outRepo := repositories.NewOutboxRepo(db)
 
 	tplSvc := services.NewTemplateService(services.TemplateDeps{
-		Templates: tplRepo, TemplateVersions: verRepo, Clock: clk, IDs: ids,
+		Templates: tplRepo, TemplateVersions: verRepo, Renderer: rdr, Clock: clk, IDs: ids,
 	})
 	emSvc := services.NewEmailService(services.EmailDeps{
 		Templates: tplRepo, TemplateVersions: verRepo, Outbox: outRepo,

@@ -28,15 +28,20 @@ export interface Param {
 }
 
 // Reasonable starter sample for a freshly added param of a given kind.
+// Why non-empty strings: the live preview substitutes samples into the
+// template, so an empty default makes `Hi {{.name}}!` render as `Hi !`
+// and users reasonably assume the preview is broken. Keep these obviously
+// placeholder-looking so nobody mistakes them for real data.
 export function defaultSampleFor(kind: ParamKind): unknown {
   switch (kind) {
     case "text":
+      return "sample text";
     case "longtext":
-      return "";
+      return "sample long-form text";
     case "number":
-      return 0;
+      return 42;
     case "integer":
-      return 0;
+      return 42;
     case "boolean":
       return false;
     case "email":
@@ -46,7 +51,7 @@ export function defaultSampleFor(kind: ParamKind): unknown {
     case "date":
       return new Date().toISOString().slice(0, 10);
     case "choice":
-      return "";
+      return "sample";
   }
 }
 

@@ -23,6 +23,7 @@ type TemplateRepository interface {
 	GetByCode(ctx context.Context, code string) (*models.EmailTemplate, error)
 	List(ctx context.Context) ([]models.EmailTemplate, error)
 	SetActiveVersion(ctx context.Context, templateID, versionID uuid.UUID) error
+	Delete(ctx context.Context, id uuid.UUID) error
 }
 
 type TemplateVersionRepository interface {

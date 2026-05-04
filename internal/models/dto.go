@@ -24,6 +24,25 @@ type CreateTemplateVersionRequest struct {
 	FromAddress  string  `json:"from_address"`
 } // @name CreateTemplateVersionRequest
 
+// PreviewTemplateRequest is the body of POST /templates/preview. It lets
+// the UI render a draft server-side using the real renderer, without
+// saving anything. params_schema is required so we can validate params
+// the same way a real send would.
+type PreviewTemplateRequest struct {
+	Subject      string  `json:"subject" validate:"required"`
+	BodyHTML     string  `json:"body_html" validate:"required"`
+	BodyText     string  `json:"body_text"`
+	ParamsSchema JSONMap `json:"params_schema" swaggertype:"object" validate:"required"`
+	Params       JSONMap `json:"params" swaggertype:"object"`
+} // @name PreviewTemplateRequest
+
+// PreviewTemplateResponse is the 200 body returned from POST /templates/preview.
+type PreviewTemplateResponse struct {
+	Subject  string `json:"subject"`
+	BodyHTML string `json:"body_html"`
+	BodyText string `json:"body_text,omitempty"`
+} // @name PreviewTemplateResponse
+
 // SetActiveVersionRequest is the body of PATCH /templates/{id}/active-version.
 type SetActiveVersionRequest struct {
 	VersionID uuid.UUID `json:"version_id" validate:"required" swaggertype:"string" format:"uuid"`

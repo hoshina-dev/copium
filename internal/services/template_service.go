@@ -17,6 +17,7 @@ import (
 type TemplateDeps struct {
 	Templates        TemplateRepository
 	TemplateVersions TemplateVersionRepository
+	Renderer         Renderer
 	Clock            Clock
 	IDs              IDGen
 }
@@ -46,6 +47,36 @@ func (s *TemplateService) Get(ctx context.Context, id uuid.UUID) (*models.EmailT
 
 func (s *TemplateService) List(ctx context.Context) ([]models.EmailTemplate, error) {
 	return s.deps.Templates.List(ctx)
+}
+
+func (s *TemplateService) Delete(ctx context.Context, id uuid.UUID) error {
+	return s.deps.Templates.Delete(ctx, id)
+}
+
+// Preview renders an unsaved draft using the real Renderer so the UI
+// preview matches exactly what a real send would emit. It validates the
+// provided params_schema itself compiles and that params pass schema
+// validation before rendering.
+func (s *TemplateService) Preview(ctx context.Context, req models.PreviewTemplateRequest) (*models.PreviewTemplateResponse, error) {
+	_ = ctx // kept for future tracing; renderer is pure CPU today
+	if err := compileSchema(req.ParamsSchema); err != nil {
+		return nil, apperrors.InvalidParams("params_schema is not a valid JSON Schema", err)
+	}
+	v := &models.EmailTemplateVersion{
+		Subject:      req.Subject,
+		BodyHTML:     req.BodyHTML,
+		BodyText:     req.BodyText,
+		ParamsSchema: req.ParamsSchema,
+	}
+	out, err := s.deps.Renderer.Render(v, req.Params)
+	if err != nil {
+		return nil, err
+	}
+	return &models.PreviewTemplateResponse{
+		Subject:  out.Subject,
+		BodyHTML: out.BodyHTML,
+		BodyText: out.BodyText,
+	}, nil
 }
 
 func (s *TemplateService) CreateVersion(ctx context.Context, templateID uuid.UUID, req models.CreateTemplateVersionRequest) (*models.EmailTemplateVersion, error) {

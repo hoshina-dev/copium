@@ -203,6 +203,54 @@ func (h *TemplateHandler) SetActiveVersion(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusOK)
 }
 
+// Delete soft-deletes a template. Existing versions and outbox history are
+// preserved so links from audit views keep resolving.
+//
+//	@Summary  Delete a template
+//	@Tags     templates
+//	@Param    id  path string true "template UUID"
+//	@Success  204
+//	@Failure  400 {object} models.ErrorResponse
+//	@Failure  404 {object} models.ErrorResponse
+//	@Router   /templates/{id} [delete]
+func (h *TemplateHandler) Delete(c *fiber.Ctx) error {
+	id, err := parseUUID(c, "id")
+	if err != nil {
+		return err
+	}
+	if err := h.svc.Delete(c.Context(), id); err != nil {
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// Preview renders an unsaved draft server-side so the UI preview matches exactly
+// what a real send would emit.
+//
+//	@Summary     Preview a template draft
+//	@Description Renders subject/body server-side using the same renderer as send.
+//	@Tags        templates
+//	@Accept      json
+//	@Produce     json
+//	@Param       request body     models.PreviewTemplateRequest  true "Draft to render"
+//	@Success     200     {object} models.PreviewTemplateResponse
+//	@Failure     400     {object} models.ErrorResponse "invalid body, schema, or params"
+//	@Router      /templates/preview [post]
+func (h *TemplateHandler) Preview(c *fiber.Ctx) error {
+	var req models.PreviewTemplateRequest
+	if err := c.BodyParser(&req); err != nil {
+		return apperrors.InvalidParams("invalid JSON body", err)
+	}
+	if err := h.validate.Struct(req); err != nil {
+		return apperrors.InvalidParams(err.Error(), nil)
+	}
+	out, err := h.svc.Preview(c.Context(), req)
+	if err != nil {
+		return err
+	}
+	return c.JSON(out)
+}
+
 func parseUUID(c *fiber.Ctx, name string) (uuid.UUID, error) {
 	id, err := uuid.Parse(c.Params(name))
 	if err != nil {
