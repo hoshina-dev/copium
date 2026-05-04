@@ -58,6 +58,60 @@ are also injected so tests are deterministic.
 
 Copy `.env.example` to `.env` and adjust. See the file for every supported variable.
 
+## Observability
+
+Copium is built for production operability. Logs, metrics, and traces are all
+emitted through the standard OpenTelemetry APIs, and the behaviour switches on
+a single env flag.
+
+### Signals
+
+| signal | when otel disabled | when `OTEL_ENABLED=true` |
+| --- | --- | --- |
+| **Logs** (`log/slog`) | Text handler → stdout | Tee: stdout **and** OTLP/gRPC via the `otelslog` bridge |
+| **Metrics** (`otel.Meter`) | Noop meter (free) | OTLP/gRPC periodic reader |
+| **Traces** (`otel.Tracer` + `otelfiber`) | Noop tracer | OTLP/gRPC batch exporter |
+
+All three share the same `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_INSECURE`
+settings and the `OTEL_SERVICE_NAME` resource attribute.
+
+### What gets logged
+
+- **HTTP access log** (Fiber `logger` middleware) — one line per request with
+  timestamp, status, method, path, latency, and error. `/healthz` / `/readyz`
+  are skipped so probes don't flood the log.
+- **Send lifecycle** — `email.queued` with `outbox_id`, `template_code`,
+  `version`, `to`, `from`.
+- **Worker dispatch** — `worker.claimed` (batch summary), then per row either
+  `worker.send_ok` (with `provider`, `provider_msg_id`) or `worker.send_failed`
+  (with `attempt`, `error`, `retry_at`). Mark-sent/mark-fail DB errors surface
+  as `worker.mark_*_error`.
+- **Lifecycle** — `server.listening`, `server.shutting_down`, `worker.enabled`,
+  `email.sender.configured`.
+
+All of these are structured key/value `slog` records, so they ship to OTLP as
+proper log records (not dumped strings) when otel is on.
+
+### What gets measured
+
+The HTTP layer and worker publish these instruments out of the box:
+
+| metric | kind | attributes | meaning |
+| --- | --- | --- | --- |
+| `http.server.request.duration` | histogram (ms) | `http.route`, `http.method`, `http.status_code` | Per-route latency — p50/p95/p99 via `histogram_quantile` |
+| `http.server.active_requests` | up/down counter | `http.method` | In-flight requests |
+| `http.server.request.size` / `response.size` | histograms (bytes) | as above | Request / response payload sizes |
+| `copium.worker.claimed` | counter | — | Rows pulled from the outbox |
+| `copium.worker.sent` | counter | `provider` | Successful deliveries |
+| `copium.worker.failed` | counter | `provider` | Sender errors (will retry / dead-letter) |
+| `copium.worker.dispatch.duration` | histogram (s) | `provider` | Time spent in `Sender.Send` |
+
+The `http.server.*` metrics come from `otelfiber`, mounted unconditionally —
+flipping `OTEL_ENABLED=true` is the only step needed to start shipping them.
+
+Add more instruments in the same pattern — call `otel.Meter("copium/<area>")`
+and the global MeterProvider routes through OTLP automatically.
+
 ## Web UI
 
 The management UI is a single-page Vite + React + Mantine app. It lets you

@@ -4,7 +4,7 @@ package middleware
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
@@ -28,7 +28,8 @@ func ErrorHandler(c *fiber.Ctx, err error) error {
 	case isApperror(err):
 		return c.Status(apperrors.StatusCode(err)).JSON(models.ErrorResponse{Error: err.Error()})
 	default:
-		log.Printf("internal error: %v", err)
+		slog.ErrorContext(c.UserContext(), "http.internal_error",
+			"method", c.Method(), "path", c.Path(), "error", err)
 		return c.Status(http.StatusInternalServerError).JSON(models.ErrorResponse{Error: "internal error"})
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/mail"
 
 	"github.com/google/uuid"
@@ -97,6 +98,12 @@ func (s *EmailService) SendEmail(ctx context.Context, req models.SendEmailReques
 		}
 		return nil, apperrors.Internal("enqueue outbox", err)
 	}
+	slog.InfoContext(ctx, "email.queued",
+		"outbox_id", row.ID,
+		"template_code", tpl.Code,
+		"version", ver.Version,
+		"to", row.ToAddress,
+		"from", row.FromAddress)
 	return &models.SendEmailResponse{OutboxID: row.ID, Status: string(row.Status)}, nil
 }
 

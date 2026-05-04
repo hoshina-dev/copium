@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -83,7 +84,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("sender: %v", err)
 	}
-	log.Printf("email sender: %s", snd.Name())
+	slog.Info("email.sender.configured", "provider", snd.Name())
 
 	rdr, _ := renderer.New()
 	clk := clock.System{}
@@ -108,9 +109,11 @@ func main() {
 		Email:    handlers.NewEmailHandler(emSvc),
 		Template: handlers.NewTemplateHandler(tplSvc),
 	})
-	if cfg.Otel.Enabled {
-		app.Use(otelfiber.Middleware())
-	}
+	// Mount otelfiber unconditionally: against the noop providers installed
+	// when OTEL is disabled it's a cheap pass-through, and this way flipping
+	// OTEL_ENABLED=true is the only step needed to start emitting HTTP
+	// spans/metrics (no rebuild, no extra wiring).
+	app.Use(otelfiber.Middleware())
 
 	if cfg.Worker.Enabled {
 		w := worker.New(worker.Deps{
@@ -119,19 +122,21 @@ func main() {
 			PollInterval: cfg.Worker.PollInterval,
 		})
 		go w.Run(rootCtx)
-		log.Printf("worker enabled (poll=%s, batch=%d)", cfg.Worker.PollInterval, cfg.Worker.BatchSize)
+		slog.Info("worker.enabled",
+			"poll_interval", cfg.Worker.PollInterval,
+			"batch_size", cfg.Worker.BatchSize)
 	}
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
 	go func() {
-		log.Printf("copium listening on %s", addr)
+		slog.Info("server.listening", "addr", addr)
 		if err := app.Listen(addr); err != nil {
-			log.Printf("server: %v", err)
+			slog.Error("server.listen_error", "error", err)
 		}
 	}()
 
 	<-rootCtx.Done()
-	log.Printf("shutting down...")
+	slog.Info("server.shutting_down")
 	shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = app.ShutdownWithContext(shutCtx)

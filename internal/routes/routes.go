@@ -6,6 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/filesystem"
+	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	fiberSwagger "github.com/gofiber/swagger"
 
@@ -29,6 +30,16 @@ func NewApp(h Handlers) *fiber.App {
 		ErrorHandler: cmw.ErrorHandler,
 	})
 	app.Use(recover.New())
+	// Request logger to stdout — gives visibility even when otel is off.
+	// Skip the health probes so kubelet/readiness pings don't spam the log.
+	app.Use(logger.New(logger.Config{
+		Format:     "${time} ${status} ${method} ${path} (${latency}) ${error}\n",
+		TimeFormat: "15:04:05",
+		Next: func(c *fiber.Ctx) bool {
+			p := c.Path()
+			return p == "/healthz" || p == "/readyz"
+		},
+	}))
 
 	app.Get("/healthz", handlers.Healthz)
 	app.Get("/readyz", handlers.Readyz)

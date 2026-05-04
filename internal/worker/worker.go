@@ -8,10 +8,13 @@ package worker
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/hoshina-dev/copium/internal/models"
 	"github.com/hoshina-dev/copium/internal/sender"
@@ -47,7 +50,17 @@ type Deps struct {
 	BaseBackoff  time.Duration // first retry delay; doubles each attempt
 }
 
-type Worker struct{ deps Deps }
+type Worker struct {
+	deps    Deps
+	metrics workerMetrics
+}
+
+type workerMetrics struct {
+	claimed  metric.Int64Counter
+	sent     metric.Int64Counter
+	failed   metric.Int64Counter
+	duration metric.Float64Histogram
+}
 
 func New(d Deps) *Worker {
 	if d.BatchSize <= 0 {
@@ -59,7 +72,22 @@ func New(d Deps) *Worker {
 	if d.BaseBackoff <= 0 {
 		d.BaseBackoff = time.Second
 	}
-	return &Worker{deps: d}
+	// Pull from the globally-installed MeterProvider. When otel is disabled
+	// this is a noop meter and the counters are free.
+	m := otel.Meter("copium/worker")
+	claimed, _ := m.Int64Counter("copium.worker.claimed",
+		metric.WithDescription("Outbox rows claimed by this worker"))
+	sent, _ := m.Int64Counter("copium.worker.sent",
+		metric.WithDescription("Outbox rows successfully delivered"))
+	failed, _ := m.Int64Counter("copium.worker.failed",
+		metric.WithDescription("Outbox rows where sender returned an error"))
+	dur, _ := m.Float64Histogram("copium.worker.dispatch.duration",
+		metric.WithDescription("Time spent in Sender.Send per outbox row"),
+		metric.WithUnit("s"))
+	return &Worker{
+		deps:    d,
+		metrics: workerMetrics{claimed: claimed, sent: sent, failed: failed, duration: dur},
+	}
 }
 
 // Run blocks, polling on PollInterval until ctx is cancelled.
@@ -72,7 +100,7 @@ func (w *Worker) Run(ctx context.Context) {
 			return
 		case <-t.C:
 			if _, err := w.ProcessOnce(ctx); err != nil {
-				log.Printf("worker: process: %v", err)
+				slog.Error("worker.process_batch", "error", err)
 			}
 		}
 	}
@@ -86,6 +114,10 @@ func (w *Worker) ProcessOnce(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	if len(rows) > 0 {
+		slog.Info("worker.claimed", "count", len(rows))
+		w.metrics.claimed.Add(ctx, int64(len(rows)))
+	}
 	for _, r := range rows {
 		w.dispatch(ctx, r)
 	}
@@ -93,7 +125,7 @@ func (w *Worker) ProcessOnce(ctx context.Context) (int, error) {
 }
 
 func (w *Worker) dispatch(ctx context.Context, r *models.EmailOutbox) {
-	now := w.deps.Clock.Now()
+	start := w.deps.Clock.Now()
 	res, err := w.deps.Sender.Send(ctx, sender.Message{
 		To:       r.ToAddress,
 		From:     r.FromAddress,
@@ -101,16 +133,33 @@ func (w *Worker) dispatch(ctx context.Context, r *models.EmailOutbox) {
 		BodyHTML: r.BodyHTML,
 		BodyText: r.BodyText,
 	})
+	dur := w.deps.Clock.Now().Sub(start).Seconds()
+	provAttr := attribute.String("provider", w.deps.Sender.Name())
+	w.metrics.duration.Record(ctx, dur, metric.WithAttributes(provAttr))
+
 	if err != nil {
 		nextAttempt := r.Attempts + 1
-		next := now.Add(w.Backoff(nextAttempt))
+		next := start.Add(w.Backoff(nextAttempt))
+		slog.Error("worker.send_failed",
+			"outbox_id", r.ID,
+			"to", r.ToAddress,
+			"attempt", nextAttempt,
+			"error", err,
+			"retry_at", next.Format(time.RFC3339))
+		w.metrics.failed.Add(ctx, 1, metric.WithAttributes(provAttr))
 		if err2 := w.deps.Store.MarkFailureAndReschedule(ctx, r.ID, err.Error(), next); err2 != nil {
-			log.Printf("worker: mark fail %s: %v", r.ID, err2)
+			slog.Error("worker.mark_fail_error", "outbox_id", r.ID, "error", err2)
 		}
 		return
 	}
-	if err := w.deps.Store.MarkSent(ctx, r.ID, w.deps.Sender.Name(), res.ProviderMessageID, now); err != nil {
-		log.Printf("worker: mark sent %s: %v", r.ID, err)
+	slog.Info("worker.send_ok",
+		"outbox_id", r.ID,
+		"to", r.ToAddress,
+		"provider", w.deps.Sender.Name(),
+		"provider_msg_id", res.ProviderMessageID)
+	w.metrics.sent.Add(ctx, 1, metric.WithAttributes(provAttr))
+	if err := w.deps.Store.MarkSent(ctx, r.ID, w.deps.Sender.Name(), res.ProviderMessageID, start); err != nil {
+		slog.Error("worker.mark_sent_error", "outbox_id", r.ID, "error", err)
 	}
 }
 
