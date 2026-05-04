@@ -39,7 +39,7 @@ func TestSMTPSender_AgainstMailhog(t *testing.T) {
 	smtpPort, _ := c.MappedPort(ctx, "1025/tcp")
 	httpPort, _ := c.MappedPort(ctx, "8025/tcp")
 
-	s := sender.NewSMTP(sender.SMTP{Host: host, Port: int(smtpPort.Num())})
+	s := sender.NewSMTP(sender.SMTP{Host: host, Port: smtpPort.Int()})
 
 	res, err := s.Send(ctx, sender.Message{
 		To:       "rcpt@example.com",
@@ -54,7 +54,7 @@ func TestSMTPSender_AgainstMailhog(t *testing.T) {
 		t.Fatal("missing provider id")
 	}
 
-	mhURL := fmt.Sprintf("http://%s:%d/api/v2/messages", host, httpPort.Num())
+	mhURL := fmt.Sprintf("http://%s:%d/api/v2/messages", host, httpPort.Int())
 	resp, err := http.Get(mhURL)
 	if err != nil {
 		t.Fatalf("mailhog GET: %v", err)
