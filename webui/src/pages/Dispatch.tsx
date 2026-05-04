@@ -8,6 +8,7 @@ import {
   Divider,
   Grid,
   Group,
+  SegmentedControl,
   Select,
   Stack,
   Text,
@@ -20,8 +21,23 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { templatesApi } from "../api/templates";
 import { emailsApi } from "../api/emails";
-import type { JSONObject, OutboxRow, Template, TemplateVersion } from "../api/types";
+import type {
+  JSONObject,
+  OutboxRow,
+  SendEmailRequest,
+  Template,
+  TemplateVersion,
+} from "../api/types";
 import { SchemaForm } from "../components/SchemaForm";
+
+type RecipientMode = "user" | "direct";
+
+// Quick-and-dirty client-side sanity check. The server uses net/mail to do
+// the authoritative validation; we just want to disable Send for obvious
+// typos so users get instant feedback.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const STATUS_COLOR: Record<string, string> = {
   pending: "gray",
@@ -38,7 +54,9 @@ export function DispatchPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selected, setSelected] = useState<string | null>(paramTemplateId ?? null);
   const [activeVersion, setActiveVersion] = useState<TemplateVersion | null>(null);
+  const [recipientMode, setRecipientMode] = useState<RecipientMode>("user");
   const [userId, setUserId] = useState("");
+  const [toAddress, setToAddress] = useState("");
   const [params, setParams] = useState<JSONObject>({});
   const [submitting, setSubmitting] = useState(false);
   const [outbox, setOutbox] = useState<OutboxRow | null>(null);
@@ -90,16 +108,22 @@ export function DispatchPage() {
     }, 1500);
   }
 
+  const recipientValid =
+    recipientMode === "user" ? UUID_RE.test(userId) : EMAIL_RE.test(toAddress);
+
   async function send() {
-    if (!selected) return;
+    if (!selected || !recipientValid) return;
     setSubmitting(true);
     setOutbox(null);
     try {
-      const res = await emailsApi.send({
+      const req: SendEmailRequest = {
         template_id: selected,
-        user_id: userId,
         params,
-      });
+        ...(recipientMode === "user"
+          ? { user_id: userId }
+          : { to_address: toAddress }),
+      };
+      const res = await emailsApi.send(req);
       notifications.show({
         color: "green",
         title: "Queued",
@@ -117,8 +141,9 @@ export function DispatchPage() {
     <Stack>
       <Title order={2}>Dispatch a test email</Title>
       <Text c="dimmed" size="sm">
-        Pick a template, supply a Custapi user id and the template parameters, then send.
-        The recipient address is resolved server-side from <Code>custapi</Code>.
+        Pick a template, choose a recipient (a <Code>custapi</Code> user we'll resolve to an
+        email, or a direct email address for someone outside the system), fill in the
+        template parameters, then send.
       </Text>
 
       <Grid gutter="md">
@@ -145,13 +170,43 @@ export function DispatchPage() {
               </Alert>
             )}
 
-            <TextInput
-              label="User ID"
-              description="Custapi user UUID. The server resolves the email address from this id."
-              placeholder="00000000-0000-0000-0000-000000000000"
-              value={userId}
-              onChange={(e) => setUserId(e.currentTarget.value)}
-            />
+            <Card withBorder padding="sm">
+              <Stack gap="xs">
+                <Text size="sm" fw={500}>
+                  Recipient
+                </Text>
+                <SegmentedControl
+                  fullWidth
+                  value={recipientMode}
+                  onChange={(v) => setRecipientMode(v as RecipientMode)}
+                  data={[
+                    { value: "user", label: "Custapi user" },
+                    { value: "direct", label: "Direct email" },
+                  ]}
+                />
+                {recipientMode === "user" ? (
+                  <TextInput
+                    label="User ID"
+                    description="Custapi user UUID. The server resolves the email address from this id."
+                    placeholder="00000000-0000-0000-0000-000000000000"
+                    value={userId}
+                    onChange={(e) => setUserId(e.currentTarget.value.trim())}
+                    error={userId && !UUID_RE.test(userId) ? "Not a valid UUID" : undefined}
+                  />
+                ) : (
+                  <TextInput
+                    label="Email address"
+                    description="Send straight to this address. Use this for partners or one-offs that aren't in our system."
+                    placeholder="someone@example.com"
+                    value={toAddress}
+                    onChange={(e) => setToAddress(e.currentTarget.value.trim())}
+                    error={
+                      toAddress && !EMAIL_RE.test(toAddress) ? "Doesn't look like an email" : undefined
+                    }
+                  />
+                )}
+              </Stack>
+            </Card>
 
             {activeVersion && (
               <Card withBorder>
@@ -176,7 +231,7 @@ export function DispatchPage() {
                 leftSection={<IconSend size={16} />}
                 onClick={send}
                 loading={submitting}
-                disabled={!selected || !userId || !activeVersion}
+                disabled={!selected || !recipientValid || !activeVersion}
               >
                 Send
               </Button>

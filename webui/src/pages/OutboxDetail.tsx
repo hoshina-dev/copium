@@ -95,7 +95,7 @@ export function OutboxDetailPage() {
                 <Divider />
                 <Row label="ID" value={row.id} />
                 <Row label="Template version" value={row.template_version_id} />
-                <Row label="User" value={row.user_id} />
+                <Row label="User" value={row.user_id ?? "(direct send - no custapi user)"} />
                 <Row label="To" value={row.to_address} />
                 <Row label="Subject" value={row.subject} />
                 <Row label="Attempts" value={`${row.attempts} / ${row.max_attempts}`} />

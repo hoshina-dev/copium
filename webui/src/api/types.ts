@@ -44,8 +44,11 @@ export interface CreateTemplateVersionRequest {
 }
 
 export interface SendEmailRequest {
-  user_id: UUID;
   template_id: UUID;
+  // Provide EXACTLY one of user_id (resolved via custapi) or to_address
+  // (direct dispatch for external addresses not in our system).
+  user_id?: UUID;
+  to_address?: string;
   params: JSONObject;
 }
 
@@ -64,7 +67,7 @@ export type OutboxStatus =
 export interface OutboxRow {
   id: UUID;
   template_version_id: UUID;
-  user_id: UUID;
+  user_id?: UUID;
   to_address: string;
   subject: string;
   status: OutboxStatus;
