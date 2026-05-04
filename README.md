@@ -15,6 +15,13 @@ through a DB-backed outbox to a pluggable `Sender` (SMTP, SES, SendGrid, noop).
   row; the parent `email_templates.active_version_id` is the pointer used by send.
 - **Param validation**: each version stores a JSON Schema; submitted params are
   validated against it before render.
+- **Web UI**: a Vite + React + Mantine SPA in `webui/` is built into `webui/dist`
+  and embedded into the Go binary via `go:embed`. Fiber serves the SPA on `/`
+  with an `index.html` fallback for client-side routing, while the JSON API
+  stays under `/api/v1/*`.
+
+> **Heads up:** copium ships with **no auth**. Don't expose it to the public
+> internet - put it behind your usual ingress / SSO if you must.
 
 ## Dependency injection
 
@@ -42,10 +49,34 @@ are also injected so tests are deterministic.
 | `make mocks` | regen testify mocks |
 | `make run` | `go run ./cmd/server` |
 | `make swagger` | regenerate OpenAPI docs |
+| `make webui-install` | `npm install` inside `webui/` |
+| `make webui-dev` | hot-reloading Vite on `http://localhost:5173`, proxies `/api`, `/swagger`, `/scalar` to `:8081` |
+| `make webui-build` | one-shot Vite production build into `webui/dist` |
+| `make build` | builds the SPA, then the Go binaries (web UI is embedded in `bin/copium`) |
 
 ## Configuration
 
 Copy `.env.example` to `.env` and adjust. See the file for every supported variable.
+
+## Web UI
+
+The management UI is a single-page Vite + React + Mantine app. It lets you
+manage email templates (create, version, set active), edit subject/body/JSON
+Schema with a live preview, and dispatch test emails with a schema-driven form
+that polls the outbox until the email is `sent` or `dead`.
+
+Two ways to run it:
+
+| mode | command | URL |
+| --- | --- | --- |
+| Hot reload | `make run` + `make webui-dev` (in two terminals) | `http://localhost:5173` |
+| Embedded prod | `make build && ./bin/copium` | `http://localhost:8081/` |
+
+In dev mode, Vite proxies `/api`, `/swagger`, `/scalar`, `/healthz` and
+`/readyz` to the Go backend on `:8081`, so the same `fetch("/api/v1/...")`
+calls work in both modes. In embedded mode, Fiber serves
+`webui/dist/assets/*` and falls back to `index.html` for any path that isn't
+the API or docs.
 
 ## API documentation
 
@@ -95,6 +126,7 @@ automatically when the project is opened in GoLand or IntelliJ IDEA Ultimate
 | Test | `Test: All (Coverage)` | same as Test: All but with the GoLand coverage runner |
 | Make | `Make: test` / `test-watch` / `mocks` / `lint` | invokes the Makefile targets |
 | Docker | `Compose: Up Dev Stack` | brings up Postgres + Mailhog from `docker-compose.dev.yml` |
+| Webui | `Webui: Dev (npm run dev)` | runs `make webui-dev` (Vite dev server on `:5173`) |
 | Compound | `Dev Stack + Server` | one-click: Compose up then Run server |
 
 Local IDE state (`workspace.xml`, `codeStyles/`, etc.) is intentionally
