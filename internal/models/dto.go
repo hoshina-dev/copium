@@ -29,11 +29,14 @@ type SetActiveVersionRequest struct {
 	VersionID uuid.UUID `json:"version_id" validate:"required" swaggertype:"string" format:"uuid"`
 } // @name SetActiveVersionRequest
 
-// SendEmailRequest is the body of POST /emails/send.
+// SendEmailRequest is the body of POST /emails/send. Provide EXACTLY ONE of
+// user_id (recipient resolved via custapi) or to_address (direct send for
+// addresses that aren't in our system, eg. partners or one-offs).
 type SendEmailRequest struct {
-	UserID     uuid.UUID `json:"user_id" validate:"required" swaggertype:"string" format:"uuid"`
-	TemplateID uuid.UUID `json:"template_id" validate:"required" swaggertype:"string" format:"uuid"`
-	Params     JSONMap   `json:"params" swaggertype:"object"`
+	TemplateID uuid.UUID  `json:"template_id" validate:"required" swaggertype:"string" format:"uuid"`
+	UserID     *uuid.UUID `json:"user_id,omitempty" swaggertype:"string" format:"uuid" example:"00000000-0000-0000-0000-000000000000"`
+	ToAddress  string     `json:"to_address,omitempty" validate:"omitempty,email" example:"someone@example.com"`
+	Params     JSONMap    `json:"params" swaggertype:"object"`
 } // @name SendEmailRequest
 
 // --- responses ---
@@ -73,7 +76,7 @@ type SendEmailResponse struct {
 type OutboxResponse struct {
 	ID                uuid.UUID  `json:"id" swaggertype:"string" format:"uuid"`
 	TemplateVersionID uuid.UUID  `json:"template_version_id" swaggertype:"string" format:"uuid"`
-	UserID            uuid.UUID  `json:"user_id" swaggertype:"string" format:"uuid"`
+	UserID            *uuid.UUID `json:"user_id,omitempty" swaggertype:"string" format:"uuid"`
 	ToAddress         string     `json:"to_address"`
 	Subject           string     `json:"subject"`
 	Status            string     `json:"status" example:"sent"`

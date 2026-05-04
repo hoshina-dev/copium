@@ -52,10 +52,14 @@ func (EmailTemplateVersion) TableName() string { return "email_template_versions
 // EmailOutbox is one queued/historical email send. All fields needed to
 // transmit are snapshotted here so a later template edit doesn't change what
 // gets sent.
+//
+// UserID is nullable: it's set when the recipient was resolved from custapi,
+// and left nil when the caller dispatched directly to ToAddress (eg. an
+// external address that isn't in our system).
 type EmailOutbox struct {
 	ID                uuid.UUID    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
 	TemplateVersionID uuid.UUID    `gorm:"type:uuid;not null;index"`
-	UserID            uuid.UUID    `gorm:"type:uuid;not null;index"`
+	UserID            *uuid.UUID   `gorm:"type:uuid;index"`
 	ToAddress         string       `gorm:"type:text;not null"`
 	FromAddress       string       `gorm:"type:text;not null"`
 	Subject           string       `gorm:"type:text;not null"`

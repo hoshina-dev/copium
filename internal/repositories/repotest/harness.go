@@ -75,7 +75,10 @@ func applyMigrations(db *gorm.DB) error {
 	if err != nil {
 		return err
 	}
-	for _, name := range []string{"001_init.up.sql"} {
+	for _, name := range []string{
+		"001_init.up.sql",
+		"002_outbox_user_id_nullable.up.sql",
+	} {
 		path := filepath.Join(root, "sql", name)
 		b, err := os.ReadFile(path)
 		if err != nil {

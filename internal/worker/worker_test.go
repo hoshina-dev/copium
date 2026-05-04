@@ -119,10 +119,11 @@ func (f *fakeSender) Send(_ context.Context, m sender.Message) (sender.SendResul
 
 func newRow(t *testing.T, when time.Time, maxAttempts int) *models.EmailOutbox {
 	t.Helper()
+	uid := uuid.New()
 	return &models.EmailOutbox{
 		ID:                uuid.New(),
 		TemplateVersionID: uuid.New(),
-		UserID:            uuid.New(),
+		UserID:            &uid,
 		ToAddress:         "rcpt@example.com",
 		FromAddress:       "from@example.com",
 		Subject:           "hi",

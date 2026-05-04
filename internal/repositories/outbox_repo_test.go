@@ -16,6 +16,8 @@ import (
 	"github.com/hoshina-dev/copium/internal/repositories/repotest"
 )
 
+func uuidPtr(u uuid.UUID) *uuid.UUID { return &u }
+
 func seedTemplate(t *testing.T, db *gorm.DB) (uuid.UUID, uuid.UUID) {
 	t.Helper()
 	tplRepo := repositories.NewTemplateRepo(db)
@@ -42,7 +44,7 @@ func TestOutboxRepo_CreateAndGet(t *testing.T) {
 	_, verID := seedTemplate(t, db)
 
 	row := &models.EmailOutbox{
-		ID: uuid.New(), TemplateVersionID: verID, UserID: uuid.New(),
+		ID: uuid.New(), TemplateVersionID: verID, UserID: uuidPtr(uuid.New()),
 		ToAddress: "a@b", FromAddress: "x@y", Subject: "hi",
 		BodyHTML: "<p>hi</p>", Status: models.OutboxStatusQueued,
 		MaxAttempts: 5, ScheduledAt: time.Now().UTC(),
@@ -70,13 +72,13 @@ func TestOutboxRepo_ClaimDue_Skips_FutureRows(t *testing.T) {
 
 	now := time.Now().UTC()
 	due := &models.EmailOutbox{
-		ID: uuid.New(), TemplateVersionID: verID, UserID: uuid.New(),
+		ID: uuid.New(), TemplateVersionID: verID, UserID: uuidPtr(uuid.New()),
 		ToAddress: "a@b", FromAddress: "x@y", Subject: "hi", BodyHTML: "x",
 		Status: models.OutboxStatusQueued, MaxAttempts: 5,
 		ScheduledAt: now.Add(-time.Minute),
 	}
 	notDue := &models.EmailOutbox{
-		ID: uuid.New(), TemplateVersionID: verID, UserID: uuid.New(),
+		ID: uuid.New(), TemplateVersionID: verID, UserID: uuidPtr(uuid.New()),
 		ToAddress: "a@b", FromAddress: "x@y", Subject: "hi", BodyHTML: "x",
 		Status: models.OutboxStatusQueued, MaxAttempts: 5,
 		ScheduledAt: now.Add(time.Hour),
@@ -110,7 +112,7 @@ func TestOutboxRepo_ClaimDue_SkipLocked_Concurrent(t *testing.T) {
 	now := time.Now().UTC()
 	for i := 0; i < 6; i++ {
 		row := &models.EmailOutbox{
-			ID: uuid.New(), TemplateVersionID: verID, UserID: uuid.New(),
+			ID: uuid.New(), TemplateVersionID: verID, UserID: uuidPtr(uuid.New()),
 			ToAddress: "a@b", FromAddress: "x@y", Subject: "hi", BodyHTML: "x",
 			Status: models.OutboxStatusQueued, MaxAttempts: 5,
 			ScheduledAt: now.Add(-time.Second),
@@ -153,7 +155,7 @@ func TestOutboxRepo_MarkSentAndMarkFailureAndReschedule(t *testing.T) {
 	now := time.Now().UTC()
 
 	r := &models.EmailOutbox{
-		ID: uuid.New(), TemplateVersionID: verID, UserID: uuid.New(),
+		ID: uuid.New(), TemplateVersionID: verID, UserID: uuidPtr(uuid.New()),
 		ToAddress: "a@b", FromAddress: "x@y", Subject: "hi", BodyHTML: "x",
 		Status: models.OutboxStatusSending, MaxAttempts: 3,
 		ScheduledAt: now.Add(-time.Hour),
@@ -176,7 +178,7 @@ func TestOutboxRepo_MarkSentAndMarkFailureAndReschedule(t *testing.T) {
 	}
 
 	r2 := &models.EmailOutbox{
-		ID: uuid.New(), TemplateVersionID: verID, UserID: uuid.New(),
+		ID: uuid.New(), TemplateVersionID: verID, UserID: uuidPtr(uuid.New()),
 		ToAddress: "a@b", FromAddress: "x@y", Subject: "hi", BodyHTML: "x",
 		Status: models.OutboxStatusSending, Attempts: 0, MaxAttempts: 2,
 	}

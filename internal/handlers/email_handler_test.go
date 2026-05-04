@@ -99,7 +99,7 @@ func TestEmailHandler_Send_202(t *testing.T) {
 		app.Post("/emails/send", h.Send)
 	})
 	resp, body := doJSON(t, app, "POST", "/emails/send", models.SendEmailRequest{
-		UserID: uid, TemplateID: tplID, Params: models.JSONMap{"name": "Alice"},
+		UserID: &uid, TemplateID: tplID, Params: models.JSONMap{"name": "Alice"},
 	})
 	if resp.StatusCode != fiber.StatusAccepted {
 		t.Fatalf("status=%d body=%s", resp.StatusCode, body)
@@ -133,13 +133,86 @@ func TestEmailHandler_Send_MissingFields(t *testing.T) {
 	}
 }
 
+func TestEmailHandler_Send_DirectEmail_202(t *testing.T) {
+	outID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	h, f := newEmailHandler(t, outID)
+	tplID, _ := setupTemplate(t, f)
+	app := newApp(func(app *fiber.App) { app.Post("/emails/send", h.Send) })
+
+	resp, body := doJSON(t, app, "POST", "/emails/send", models.SendEmailRequest{
+		TemplateID: tplID,
+		ToAddress:  "external@example.com",
+		Params:     models.JSONMap{"name": "Pat"},
+	})
+	if resp.StatusCode != fiber.StatusAccepted {
+		t.Fatalf("status=%d body=%s", resp.StatusCode, body)
+	}
+	row := f.OutboxRepo.Rows[outID]
+	if row == nil {
+		t.Fatal("expected outbox row")
+	}
+	if row.UserID != nil {
+		t.Errorf("UserID must be nil for direct sends, got %v", row.UserID)
+	}
+	if row.ToAddress != "external@example.com" {
+		t.Errorf("To=%q", row.ToAddress)
+	}
+}
+
+func TestEmailHandler_Send_MissingRecipient_400(t *testing.T) {
+	h, f := newEmailHandler(t, uuid.New())
+	tplID, _ := setupTemplate(t, f)
+	app := newApp(func(app *fiber.App) { app.Post("/emails/send", h.Send) })
+
+	resp, _ := doJSON(t, app, "POST", "/emails/send", models.SendEmailRequest{
+		TemplateID: tplID,
+		Params:     models.JSONMap{"name": "x"},
+	})
+	if resp.StatusCode != 400 {
+		t.Errorf("code=%d (want 400 for missing recipient)", resp.StatusCode)
+	}
+}
+
+func TestEmailHandler_Send_BothRecipients_400(t *testing.T) {
+	h, f := newEmailHandler(t, uuid.New())
+	tplID, _ := setupTemplate(t, f)
+	uid := uuid.New()
+	f.UserResolver.Emails[uid] = "u@x"
+	app := newApp(func(app *fiber.App) { app.Post("/emails/send", h.Send) })
+
+	resp, _ := doJSON(t, app, "POST", "/emails/send", models.SendEmailRequest{
+		TemplateID: tplID,
+		UserID:     &uid,
+		ToAddress:  "external@example.com",
+		Params:     models.JSONMap{"name": "x"},
+	})
+	if resp.StatusCode != 400 {
+		t.Errorf("code=%d (want 400 when both recipients given)", resp.StatusCode)
+	}
+}
+
+func TestEmailHandler_Send_BadEmail_400(t *testing.T) {
+	h, f := newEmailHandler(t, uuid.New())
+	tplID, _ := setupTemplate(t, f)
+	app := newApp(func(app *fiber.App) { app.Post("/emails/send", h.Send) })
+
+	resp, _ := doJSON(t, app, "POST", "/emails/send", models.SendEmailRequest{
+		TemplateID: tplID,
+		ToAddress:  "not-an-email",
+		Params:     models.JSONMap{"name": "x"},
+	})
+	if resp.StatusCode != 400 {
+		t.Errorf("code=%d (want 400 for malformed to_address)", resp.StatusCode)
+	}
+}
+
 func TestEmailHandler_Send_TemplateNotFound(t *testing.T) {
 	h, f := newEmailHandler(t, uuid.New())
 	uid := uuid.New()
 	f.UserResolver.Emails[uid] = "x@x"
 	app := newApp(func(app *fiber.App) { app.Post("/emails/send", h.Send) })
 	resp, _ := doJSON(t, app, "POST", "/emails/send", models.SendEmailRequest{
-		UserID: uid, TemplateID: uuid.New(), Params: models.JSONMap{"name": "x"},
+		UserID: &uid, TemplateID: uuid.New(), Params: models.JSONMap{"name": "x"},
 	})
 	if resp.StatusCode != 404 {
 		t.Errorf("code=%d", resp.StatusCode)
@@ -153,7 +226,7 @@ func TestEmailHandler_Send_InvalidParams(t *testing.T) {
 	f.UserResolver.Emails[uid] = "x@x"
 	app := newApp(func(app *fiber.App) { app.Post("/emails/send", h.Send) })
 	resp, _ := doJSON(t, app, "POST", "/emails/send", models.SendEmailRequest{
-		UserID: uid, TemplateID: tplID, Params: models.JSONMap{},
+		UserID: &uid, TemplateID: tplID, Params: models.JSONMap{},
 	})
 	if resp.StatusCode != 400 {
 		t.Errorf("code=%d", resp.StatusCode)
@@ -163,8 +236,9 @@ func TestEmailHandler_Send_InvalidParams(t *testing.T) {
 func TestEmailHandler_GetOutbox_OK(t *testing.T) {
 	h, f := newEmailHandler(t, uuid.New())
 	id := uuid.New()
+	uid := uuid.New()
 	f.OutboxRepo.Rows[id] = &models.EmailOutbox{
-		ID: id, TemplateVersionID: uuid.New(), UserID: uuid.New(),
+		ID: id, TemplateVersionID: uuid.New(), UserID: &uid,
 		ToAddress: "a@b", FromAddress: "x@y", Subject: "hi", BodyHTML: "x",
 		Status: models.OutboxStatusSent, MaxAttempts: 5,
 	}

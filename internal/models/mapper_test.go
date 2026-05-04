@@ -60,7 +60,7 @@ func TestOutboxToResponse(t *testing.T) {
 	out := &models.EmailOutbox{
 		ID:                id,
 		TemplateVersionID: verID,
-		UserID:            uid,
+		UserID:            &uid,
 		ToAddress:         "a@b.com",
 		FromAddress:       "x@y.com",
 		Subject:           "Hi",
@@ -73,7 +73,7 @@ func TestOutboxToResponse(t *testing.T) {
 		UpdatedAt:         now,
 	}
 	got := models.OutboxToResponse(out)
-	if got.ID != id || got.UserID != uid || got.Status != "queued" {
+	if got.ID != id || got.UserID == nil || *got.UserID != uid || got.Status != "queued" {
 		t.Fatalf("unexpected: %+v", got)
 	}
 }

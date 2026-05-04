@@ -13,6 +13,7 @@ services:
     volumes:
       # postgres applies every *.sql in alphabetical order on first init.
       - ./sql/001_init.up.sql:/docker-entrypoint-initdb.d/001_init.up.sql:ro
+      - ./sql/002_outbox_user_id_nullable.up.sql:/docker-entrypoint-initdb.d/002_outbox_user_id_nullable.up.sql:ro
       - ./sql_mock/900_seed_templates.up.sql:/docker-entrypoint-initdb.d/900_seed_templates.up.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d copium"]

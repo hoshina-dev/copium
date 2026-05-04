@@ -67,7 +67,7 @@ func TestSendEmail_Happy_EnqueuesSnapshot(t *testing.T) {
 	f.UserResolver.Emails[uid] = "alice@example.com"
 
 	res, err := svc.SendEmail(context.Background(), models.SendEmailRequest{
-		UserID:     uid,
+		UserID:     &uid,
 		TemplateID: tpl.ID,
 		Params:     models.JSONMap{"name": "Alice"},
 	})
@@ -109,8 +109,8 @@ func TestSendEmail_Happy_EnqueuesSnapshot(t *testing.T) {
 	if row.TemplateVersionID != ver.ID {
 		t.Errorf("TemplateVersionID=%v want %v", row.TemplateVersionID, ver.ID)
 	}
-	if row.UserID != uid {
-		t.Errorf("UserID=%v", row.UserID)
+	if row.UserID == nil || *row.UserID != uid {
+		t.Errorf("UserID=%v want %v", row.UserID, uid)
 	}
 	if got := row.Params["name"]; got != "Alice" {
 		t.Errorf("Params not snapshotted: %v", row.Params)
@@ -134,7 +134,7 @@ func TestSendEmail_TemplateFromAddressOverridesDefault(t *testing.T) {
 	f.UserResolver.Emails[uid] = "x@x"
 
 	_, err := svc.SendEmail(context.Background(), models.SendEmailRequest{
-		UserID: uid, TemplateID: tpl.ID, Params: models.JSONMap{},
+		UserID: &uid, TemplateID: tpl.ID, Params: models.JSONMap{},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -146,9 +146,10 @@ func TestSendEmail_TemplateFromAddressOverridesDefault(t *testing.T) {
 
 func TestSendEmail_TemplateNotFound(t *testing.T) {
 	svc, f := newEmailSvc(t, time.Now(), uuid.New())
-	_ = f
+	uid := uuid.New()
+	f.UserResolver.Emails[uid] = "x@x"
 	_, err := svc.SendEmail(context.Background(), models.SendEmailRequest{
-		UserID: uuid.New(), TemplateID: uuid.New(),
+		UserID: &uid, TemplateID: uuid.New(),
 	})
 	if !errors.Is(err, apperrors.ErrNotFound) {
 		t.Fatalf("want ErrNotFound, got %v", err)
@@ -162,7 +163,7 @@ func TestSendEmail_NoActiveVersion(t *testing.T) {
 	uid := uuid.New()
 	f.UserResolver.Emails[uid] = "x@x"
 	_, err := svc.SendEmail(context.Background(), models.SendEmailRequest{
-		UserID: uid, TemplateID: tpl.ID,
+		UserID: &uid, TemplateID: tpl.ID,
 	})
 	if !errors.Is(err, apperrors.ErrInvalidParams) {
 		t.Fatalf("want ErrInvalidParams (no active version), got %v", err)
@@ -178,7 +179,7 @@ func TestSendEmail_InvalidParams(t *testing.T) {
 	uid := uuid.New()
 	f.UserResolver.Emails[uid] = "x@x"
 	_, err := svc.SendEmail(context.Background(), models.SendEmailRequest{
-		UserID: uid, TemplateID: tpl.ID, Params: models.JSONMap{},
+		UserID: &uid, TemplateID: tpl.ID, Params: models.JSONMap{},
 	})
 	if !errors.Is(err, apperrors.ErrInvalidParams) {
 		t.Fatalf("want ErrInvalidParams, got %v", err)
@@ -192,11 +193,87 @@ func TestSendEmail_UserNotFound(t *testing.T) {
 	svc, f := newEmailSvc(t, time.Now(), uuid.New())
 	tpl, _ := makeTemplateAndVersion(t, f, models.JSONMap{"type": "object"})
 	f.UserResolver.MissingErr = apperrors.NotFound("user", nil)
+	uid := uuid.New()
 	_, err := svc.SendEmail(context.Background(), models.SendEmailRequest{
-		UserID: uuid.New(), TemplateID: tpl.ID,
+		UserID: &uid, TemplateID: tpl.ID,
 	})
 	if !errors.Is(err, apperrors.ErrNotFound) {
 		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+// --- direct email path (no custapi lookup) ---
+
+func TestSendEmail_DirectEmail_HappyPath(t *testing.T) {
+	fixed := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+	outID := uuid.New()
+	svc, f := newEmailSvc(t, fixed, outID)
+	tpl, _ := makeTemplateAndVersion(t, f, models.JSONMap{
+		"type": "object", "required": []any{"name"},
+		"properties": map[string]any{"name": map[string]any{"type": "string"}},
+	})
+
+	res, err := svc.SendEmail(context.Background(), models.SendEmailRequest{
+		TemplateID: tpl.ID,
+		ToAddress:  "external@example.com",
+		Params:     models.JSONMap{"name": "External"},
+	})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if res.OutboxID != outID || res.Status != "queued" {
+		t.Errorf("res=%+v", res)
+	}
+	row := f.OutboxRepo.Rows[outID]
+	if row.ToAddress != "external@example.com" {
+		t.Errorf("To=%q", row.ToAddress)
+	}
+	if row.UserID != nil {
+		t.Errorf("UserID must be nil for direct sends, got %v", row.UserID)
+	}
+	if f.UserResolver.Calls != 0 {
+		t.Errorf("UserResolver must not be called for direct sends, got %d calls", f.UserResolver.Calls)
+	}
+}
+
+func TestSendEmail_RejectsBothUserIDAndToAddress(t *testing.T) {
+	svc, f := newEmailSvc(t, time.Now(), uuid.New())
+	tpl, _ := makeTemplateAndVersion(t, f, models.JSONMap{"type": "object"})
+	uid := uuid.New()
+	f.UserResolver.Emails[uid] = "x@x"
+
+	_, err := svc.SendEmail(context.Background(), models.SendEmailRequest{
+		TemplateID: tpl.ID,
+		UserID:     &uid,
+		ToAddress:  "other@example.com",
+	})
+	if !errors.Is(err, apperrors.ErrInvalidParams) {
+		t.Fatalf("want ErrInvalidParams when both user_id and to_address are set, got %v", err)
+	}
+}
+
+func TestSendEmail_RejectsNeitherUserIDNorToAddress(t *testing.T) {
+	svc, f := newEmailSvc(t, time.Now(), uuid.New())
+	tpl, _ := makeTemplateAndVersion(t, f, models.JSONMap{"type": "object"})
+
+	_, err := svc.SendEmail(context.Background(), models.SendEmailRequest{
+		TemplateID: tpl.ID,
+	})
+	if !errors.Is(err, apperrors.ErrInvalidParams) {
+		t.Fatalf("want ErrInvalidParams when no recipient, got %v", err)
+	}
+}
+
+func TestSendEmail_DirectEmail_RejectsMalformedAddress(t *testing.T) {
+	svc, f := newEmailSvc(t, time.Now(), uuid.New())
+	tpl, _ := makeTemplateAndVersion(t, f, models.JSONMap{"type": "object"})
+
+	_, err := svc.SendEmail(context.Background(), models.SendEmailRequest{
+		TemplateID: tpl.ID,
+		ToAddress:  "not-an-email",
+	})
+	if !errors.Is(err, apperrors.ErrInvalidParams) {
+		t.Fatalf("want ErrInvalidParams for malformed address, got %v", err)
 	}
 }
 
@@ -207,7 +284,7 @@ func TestSendEmail_OutboxFailureSurfaced(t *testing.T) {
 	f.UserResolver.Emails[uid] = "x@x"
 	f.OutboxRepo.CreateErr = errors.New("db down")
 	_, err := svc.SendEmail(context.Background(), models.SendEmailRequest{
-		UserID: uid, TemplateID: tpl.ID,
+		UserID: &uid, TemplateID: tpl.ID,
 	})
 	if err == nil {
 		t.Fatal("expected error")
