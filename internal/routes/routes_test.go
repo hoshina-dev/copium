@@ -92,6 +92,41 @@ func TestRoutes_TemplatesEndpointReachable(t *testing.T) {
 	}
 }
 
+// TestRoutes_RootServesPlaceholderOrSPA covers both states: when the Vite
+// build is embedded `/` returns the SPA index; when it isn't, we serve a
+// helpful dev placeholder. Either way it must be a 200 OK HTML response.
+func TestRoutes_RootServesPlaceholderOrSPA(t *testing.T) {
+	app := buildApp(t)
+	resp, err := app.Test(httptest.NewRequest("GET", "/", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("/ -> %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("expected HTML, got Content-Type=%q", ct)
+	}
+}
+
+// TestRoutes_UnknownAPIStillReturns404 guards against the SPA fallback
+// accidentally swallowing /api/v1/* misses.
+func TestRoutes_UnknownAPIStillReturns404(t *testing.T) {
+	app := buildApp(t)
+	for _, p := range []string{
+		"/api/v1/does-not-exist",
+		"/api/v1/templates/not-a-uuid/wat",
+	} {
+		resp, err := app.Test(httptest.NewRequest("GET", p, nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != 404 {
+			t.Errorf("%s -> %d (want 404)", p, resp.StatusCode)
+		}
+	}
+}
+
 func buildApp(t *testing.T) *fiber.App {
 	t.Helper()
 	f := servicestest.New()
