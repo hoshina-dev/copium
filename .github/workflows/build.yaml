@@ -1,0 +1,158 @@
+name: Build Copium Docker Image
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  DOCKERFILE_PATH: Dockerfile
+  GHCR_REGISTRY: ghcr.io
+  GHCR_IMAGE_NAME: copium
+
+jobs:
+  prepare:
+    name: Prepare variables
+    runs-on: ubuntu-latest
+    outputs:
+      semver: ${{ steps.set.outputs.semver }}
+      ghcr_image_full: ${{ steps.set.outputs.ghcr_image_full }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine version and image tags
+        id: set
+        run: |
+          set -eux
+
+          SEMVER="latest"
+
+          GHCR_IMAGE_FULL="${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/${{ env.GHCR_IMAGE_NAME }}"
+
+          echo "semver=$SEMVER" >> $GITHUB_OUTPUT
+          echo "ghcr_image_full=$GHCR_IMAGE_FULL" >> $GITHUB_OUTPUT
+
+  build-amd64:
+    name: Build (amd64)
+    needs: prepare
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.GHCR_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push amd64 image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ${{ env.DOCKERFILE_PATH }}
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ needs.prepare.outputs.ghcr_image_full }}-build:latest-amd64
+
+  build-arm64:
+    name: Build (arm64)
+    needs: prepare
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.GHCR_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push arm64 image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ${{ env.DOCKERFILE_PATH }}
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ needs.prepare.outputs.ghcr_image_full }}-build:latest-arm64
+
+  push-to-ghcr:
+    name: Create manifests & push to GHCR
+    needs:
+      - build-amd64
+      - build-arm64
+      - prepare
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.GHCR_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifest
+        run: |
+          set -eux
+          GHCR_IMAGE="${{ needs.prepare.outputs.ghcr_image_full }}"
+          BUILD_IMAGE="${{ needs.prepare.outputs.ghcr_image_full }}-build"
+          COMMIT_SHA="${{ github.sha }}"
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+
+          docker buildx imagetools create \
+            --tag ${GHCR_IMAGE}:latest \
+            --tag ${GHCR_IMAGE}:${SHORT_SHA} \
+            ${BUILD_IMAGE}:latest-amd64 \
+            ${BUILD_IMAGE}:latest-arm64
+
+  cleanup:
+    name: Cleanup temporary build images
+    needs:
+      - push-to-ghcr
+      - prepare
+    runs-on: ubuntu-24.04
+    if: always()
+    steps:
+      - name: Delete temporary build package
+        run: |
+          set -eux
+
+          # Extract package name from image name
+          PACKAGE_NAME="${{ env.GHCR_IMAGE_NAME }}-build"
+
+          echo "Attempting to delete package: ${PACKAGE_NAME}"
+
+          # Try to delete the entire package (this will fail if package doesn't exist, which is fine)
+          curl -X DELETE \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/user/packages/container/${PACKAGE_NAME}" \
+            || echo "Package ${PACKAGE_NAME} may not exist or already deleted"
+
+          echo "Cleanup completed"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
